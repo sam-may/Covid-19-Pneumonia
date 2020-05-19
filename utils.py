@@ -1,95 +1,103 @@
-import cv2
-import matplotlib.pyplot as plt
+import os, sys
+
 import numpy
+import glob
+import h5py
+import json
+import random
+import math
 
-from matplotlib.colors import NoNorm
+import matplotlib.pyplot as plt
 
-def preprocess(img):
-    img = enforce_positive(img)
-    if len(img.shape) == 3:
-        img = img[:,:,0]
-    return img
+import cv2
 
-def enforce_positive(img):
-    min_val = numpy.min(img)
-    if min_val < 0:
-        img += -min_val
-    return img
+import pydicom
+import nibabel
 
-def transparent_cmap(cmap, N=255):
-    "Copy colormap and set alpha values"
+def load_dcms(files):
+    ct_slices = []
+    for file in files:
+        f = pydicom.dcmread(file)
+        if hasattr(f, 'SliceLocation'): # skip scout views
+            ct_slices.append(f)
+    sorted(ct_slices, key=lambda s: s.SliceLocation).reverse()
+    ct_slices_ = []
+    for ct_slice in ct_slices:
+        ct_slices_.append(ct_slice.pixel_array)
+    return numpy.array(ct_slices_).astype(numpy.float64)
 
-    mycmap = cmap
-    mycmap._init()
-    mycmap._lut[:,-1] = numpy.linspace(0, 0.8, N+4)
-    return mycmap
+def load_nii(file):
+    label = nibabel.load(file).get_fdata()
+    label = numpy.flip(numpy.rot90(label, -1), 1)
 
-def plot_img(img):
-    plt.imshow(img, cmap = 'gray')
-    #plt.imshow(img, cmap = 'gray', norm = NoNorm())
+    label_ = []
+    for i in range(len(label[0,0])):
+        label_.append(label[:,:,i])
 
-def annotate_with_pneumonia(img, pneumonia):
-    plot_img(img)
+    return numpy.array(label_).astype(numpy.float64)
 
-    w, h = pneumonia.shape
-    x, y = numpy.mgrid[0:w, 0:h]
+def power_of_two(n):
+    return math.log2(n).is_integer()
 
-    cmap = transparent_cmap(plt.cm.cool)
-    levels = numpy.linspace(0,1,15)
+def downsample_images(images, downsample, round = False):
+    nPixels = images.shape[-1]
 
-    pneumonia_score = plt.contourf(x, y, pneumonia, 15, cmap = cmap, levels = levels)
-    cbar = plt.colorbar(pneumonia_score)
-    cbar.set_label('Pneumonia Score', rotation=270)
+    if (not power_of_two(nPixels) or not power_of_two(downsample) or not power_of_two(nPixels / downsample)):
+        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (nPixels, nPixels/downsample))
+        sys.exit(1)
 
-def plot_pneumonia_heatmap(img, pred, name = "test"):
-    img = enforce_positive(img)
-    img = img[:,:,0]
+    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (nPixels, int(nPixels/downsample)))
 
+    downsampled_images = []
+    for image in images:
+        downsampled_images.append(cv2.resize(image, dsize=(int(nPixels/downsample), int(nPixels/downsample)), interpolation=cv2.INTER_CUBIC))
+
+    out = numpy.array(downsampled_images)
+    if round:
+        return numpy.round(out)
+    else:
+        return out
+
+def nonzero_entries(array):
+    nonzero = []
+
+    array = numpy.array(array)
+    for i in range(len(array)):
+        flat = array[i].flatten()
+        nonzero_idx = numpy.where(flat > 0)[0]
+        nonzero += list(flat[nonzero_idx])
+
+    return numpy.array(nonzero)
+
+def scale_image(image): # scales image from 0 to 1
+    image = numpy.array(image)
+
+    min_val = numpy.amin(image)
+    image += -min_val
+
+    max_val = numpy.amax(image)
+    image *= 1./max_val
+    return image
+
+def plot_image_and_truth(image, truth, name):
     fig = plt.figure()
-    ax = fig.add_subplot(111)
-    plt.imshow(img)
+    ax = fig.add_subplot(131)
+    image_scaled = scale_image(image)
+    plt.imshow(image_scaled, cmap = 'gray')
 
-    w, h, z = pred.shape
-    x, y = numpy.mgrid[0:w, 0:h]
+    ax = fig.add_subplot(132)
+    plt.imshow(truth, cmap = 'gray')
 
-    cmap = transparent_cmap(plt.cm.cool)
+    ax = fig.add_subplot(133)
+    blend = image_scaled
+    max_val = numpy.amax(blend)
+    for i in range(len(truth)):
+        for j in range(len(truth)):
+            if truth[i][j] == 1:
+                blend[i][j] = 1
 
-    levels = numpy.linspace(0,1,15)
-    pneumonia_score = plt.contourf(x, y, pred[:,:,0], 15, cmap = cmap, levels = levels)
-    cbar = plt.colorbar(pneumonia_score)
-    cbar.set_label('Pneumonia Score', rotation=270)
+    plt.imshow(blend, cmap = 'gray')
 
-    plt.savefig('plots/pneumonia_score_%s.pdf' % name)
+    plt.savefig(name)
     plt.close(fig)
 
-def overlay_images(img1, img2, alpha, name = "test"):
-    img1 = enforce_positive(img)
-    img2 = enforce_positive(img)
-
-    overlay = numpy.zeros_like(img1)
-    cv2.addWeighted(img1, 1, img2, alpha, 0, overlay)
-    
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    plt.imshow(overlay)
-    plt.savefig("plots/overlay_%s.pdf" % name)
-    plt.close(fig)
-
-def comparison(img, truth, pred, tag):
-    img = preprocess(img)
-    truth = preprocess(truth)
-    pred = preprocess(pred) 
-    
-    fig = plt.figure()
-
-    ax = fig.add_subplot(221)
-    plot_img(img)
-
-    ax = fig.add_subplot(222)
-    annotate_with_pneumonia(img, truth)
-
-    ax = fig.add_subplot(223)
-    annotate_with_pneumonia(img, pred)
-
-    plt.savefig("plots/comparison_%s.pdf" % tag)
-    plt.close(fig) 
