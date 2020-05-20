@@ -20,11 +20,21 @@ def load_dcms(files):
         f = pydicom.dcmread(file)
         if hasattr(f, 'SliceLocation'): # skip scout views
             ct_slices.append(f)
-    sorted(ct_slices, key=lambda s: s.SliceLocation).reverse()
+        else:
+            print("[UTILS.PY] load_dcms: found slice that is a scout view (?)")
+
+    ct_slices = sort(ct_slices)
+    
     ct_slices_ = []
+    ct_slices.reverse() # do I need this?
     for ct_slice in ct_slices:
         ct_slices_.append(ct_slice.pixel_array)
     return numpy.array(ct_slices_).astype(numpy.float64)
+
+def sort(slices):
+    slice_locs = [float(s.SliceLocation) for s in slices]
+    idx_sorted = numpy.flipud(numpy.argsort(slice_locs)) # flip so we sort head to toe
+    return list(numpy.array(slices)[idx_sorted])
 
 def load_nii(file):
     label = nibabel.load(file).get_fdata()
@@ -42,15 +52,15 @@ def power_of_two(n):
 def downsample_images(images, downsample, round = False):
     nPixels = images.shape[-1]
 
-    if (not power_of_two(nPixels) or not power_of_two(downsample) or not power_of_two(nPixels / downsample)):
-        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (nPixels, nPixels/downsample))
+    if (not power_of_two(nPixels) or not power_of_two(downsample) or not (nPixels / downsample).is_integer()):
+        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (nPixels, downsample))
         sys.exit(1)
 
-    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (nPixels, int(nPixels/downsample)))
+    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (nPixels, downsample))
 
     downsampled_images = []
     for image in images:
-        downsampled_images.append(cv2.resize(image, dsize=(int(nPixels/downsample), int(nPixels/downsample)), interpolation=cv2.INTER_CUBIC))
+        downsampled_images.append(cv2.resize(image, dsize=(downsample, downsample), interpolation=cv2.INTER_CUBIC))
 
     out = numpy.array(downsampled_images)
     if round:
@@ -79,14 +89,17 @@ def scale_image(image): # scales image from 0 to 1
     image *= 1./max_val
     return image
 
+fs = 8
 def plot_image_and_truth(image, truth, name):
     fig = plt.figure()
     ax = fig.add_subplot(131)
     image_scaled = scale_image(image)
     plt.imshow(image_scaled, cmap = 'gray')
+    plt.title("Original CT Scan", fontsize = fs)
 
     ax = fig.add_subplot(132)
     plt.imshow(truth, cmap = 'gray')
+    plt.title("Radiologist Ground Truth", fontsize = fs)
 
     ax = fig.add_subplot(133)
     blend = image_scaled
@@ -97,7 +110,7 @@ def plot_image_and_truth(image, truth, name):
                 blend[i][j] = 1
 
     plt.imshow(blend, cmap = 'gray')
-
+    plt.title("Original & Truth", fontsize = fs)
     plt.savefig(name)
     plt.close(fig)
 

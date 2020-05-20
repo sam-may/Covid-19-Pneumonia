@@ -42,7 +42,7 @@ class Data_Helper():
 
     def load_data(self):
         self.patients = {}
-        for dir in glob.glob(self.input_dir + "/patient11*/"):
+        for dir in glob.glob(self.input_dir + "/patient*/"):
             patient = dir.split("/")[-2]
             self.patients[patient] = {
                     "inputs" : glob.glob(dir + "*/"),
@@ -70,11 +70,20 @@ class Data_Helper():
             self.patients[patient]["y"] = utils.downsample_images(data["y"], self.downsample, round = True)
  
     def assess(self, N, tag): # make plots of N randomly chosen images
-        for i in range(N):
-            image, truth = self.select_random_slice()    
-            output_img = self.output_dir + "/image_and_truth_%s_%d.pdf" % (tag, i)
-            utils.plot_image_and_truth(image, truth, output_img)
-            self.metadata["diagnostic_plots"].append(output_img)
+        if N > 0:
+            for i in range(N):
+                image, truth = self.select_random_slice()    
+                output_img = self.output_dir + "/image_and_truth_%s_%d.pdf" % (tag, i)
+                utils.plot_image_and_truth(image, truth, output_img)
+                self.metadata["diagnostic_plots"].append(output_img)
+        else:
+            for patient, data in self.patients.items():
+                for i in range(len(data["X"])):
+                    image, truth = data["X"][i], data["y"][i]
+                    output_img = self.output_dir + "/image_and_truth_%s_%s_%d.pdf" % (tag, patient, i)
+                    utils.plot_image_and_truth(image, truth, output_img)
+                    self.metadata["diagnostic_plots"].append(output_img)
+
 
     def select_random_slice(self):
         patient = random.choice(list(self.patients.keys()))
