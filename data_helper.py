@@ -17,6 +17,7 @@ class Data_Helper():
         self.tag        = kwargs.get('tag')
         
         self.downsample = kwargs.get('downsample')
+        self.min_size   = kwargs.get('min_size', 512) # automatically downsample all images to this size to begin with (some inputs may be bigger, some will be this size)
 
         self.preprocess_method = kwargs.get('preprocess_method', 'z_score')
 
@@ -54,6 +55,17 @@ class Data_Helper():
                 print("[DATA_HELPER] Extracting data from directory %s" % subdir)
                 X = utils.load_dcms(glob.glob(subdir + "/*.dcm"))
                 y = utils.load_nii(subdir + "/ct_mask_covid_edited.nii")
+                if X.shape != y.shape:
+                    print("[DATA_HELPER] Input features have shape %s but label has shape %s -- please check!" % (str(X.shape), str(y.shape)))
+                    sys.exit(1)
+                if X.shape[1] < self.min_size:
+                    print("[DATA_HELPER] Images are assumed to be at least %d x %d pixels, but this image is %d x %d pixels -- please check!" % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
+                    sys.exit(1)
+                elif X.shape[1] > self.min_size:
+                    print("[DATA_HELPER] Images are assumed to be as small as %d x %d pixels, and this image is %d x %d pixels, so we resize it down to be compatible with the rest." % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
+                    X = utils.downsample_images(X, self.min_size)
+                    y = utils.downsample_images(y, self.min_size, round = True)
+
                 self.add_data(patient, X, y)
 
     def add_data(self, patient, X, y):

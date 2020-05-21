@@ -14,7 +14,7 @@ import nibabel
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--tag", help = "tag to identify this set", type=str, default = "")
-parser.add_argument("--downsample", help = "factor n by which to downsample images", type=int, default = 128)
+parser.add_argument("--downsample", help = "factor n by which to downsample images", type=int, default = 256)
 args = parser.parse_args()
 
 import data_helper

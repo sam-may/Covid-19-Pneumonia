@@ -114,3 +114,64 @@ def plot_image_and_truth(image, truth, name):
     plt.savefig(name)
     plt.close(fig)
 
+def transparent_cmap(cmap, N=255):
+    "Copy colormap and set alpha values"
+
+    mycmap = cmap
+    mycmap._init()
+    mycmap._lut[:,-1] = numpy.linspace(0, 0.8, N+4)
+    return mycmap
+
+def make_heatmap(pred, divergent_colormap = False):
+    w, h = pred.shape
+    x, y = numpy.mgrid[0:w, 0:h]
+
+    if not divergent_colormap:
+        cmap = transparent_cmap(plt.cm.cool)
+        levels = numpy.linspace(0, 1, 15)
+    else:
+        cmap = plt.cm.coolwarm
+        levels = numpy.linspace(-1, 1, 15)
+
+    return x, y, cmap, levels
+
+def plot_image_truth_and_pred(image, truth, pred, name):
+    fig = plt.figure()
+    ax = fig.add_subplot(231)
+
+    image_scaled = scale_image(image)
+    plt.imshow(image_scaled, cmap = 'gray')
+    plt.title("Original", fontsize = fs)
+
+    ax = fig.add_subplot(232)
+    plt.imshow(truth, cmap = 'gray')
+    plt.title("Ground Truth", fontsize = fs)
+
+    ax = fig.add_subplot(233)
+    plt.imshow(pred, cmap = 'gray')
+    plt.title("U-Net Prediction", fontsize = fs)
+
+    ax = fig.add_subplot(234)
+    plt.imshow(image_scaled, cmap = 'gray')
+    x, y, cmap, levels = make_heatmap(truth)
+    heatmap = plt.contourf(x, y, truth, cmap = cmap, levels = levels)
+    cbar = plt.colorbar(heatmap)
+    plt.title('Original + Truth', fontsize = fs)
+
+    ax = fig.add_subplot(235)
+    plt.imshow(image_scaled, cmap = 'gray')
+    x, y, cmap, levels = make_heatmap(pred)
+    heatmap = plt.contourf(x, y, pred, cmap = cmap, levels = levels)
+    cbar = plt.colorbar(heatmap)
+    plt.title('Original + Prediction', fontsize = fs)
+
+    ax = fig.add_subplot(236)
+    plt.imshow(image_scaled, cmap = 'gray')
+    x, y, cmap, levels = make_heatmap(truth - pred, True)
+    heatmap = plt.contourf(x, y, truth - pred, cmap = cmap, levels = levels)
+    cbar = plt.colorbar(heatmap)
+    plt.title('Truth - Prediction', fontsize = fs)
+
+    plt.savefig('plots/unet_assessment_%s.pdf' % name)
+    plt.close(fig)
+    

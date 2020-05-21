@@ -68,15 +68,14 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image = None,
     return conv
     
 def unet(config):
-    n_pixels = config["n_pixels"]
-
-    n_filters = config["n_filters"]
-    n_layers_conv = config["n_layers_conv"]
-    n_layers_unet = config["n_layers_unet"]
-    kernel_size = config["kernel_size"]
-
-    dropout = config["dropout"]
-    batch_norm = config["batch_norm"]
+    n_pixels            = config["n_pixels"]
+    n_filters           = config["n_filters"]
+    n_layers_conv       = config["n_layers_conv"]
+    n_layers_unet       = config["n_layers_unet"]
+    kernel_size         = config["kernel_size"]
+    dropout             = config["dropout"]
+    batch_norm          = config["batch_norm"]
+    learning_rate       = config["learning_rate"]
 
     input_img = keras.layers.Input(shape=(n_pixels, n_pixels, 1), name = 'input_img')
     conv = input_img
@@ -94,7 +93,7 @@ def unet(config):
     output = std_conv('out', conv, 1, 1, kernel_size, 1, dropout = 0, batch_norm = False, activation = 'sigmoid') 
 
     model = keras.models.Model(inputs = [input_img], outputs = [output])
-    optimizer = keras.optimizers.Adam()
+    optimizer = keras.optimizers.Adam(lr = learning_rate)
     model.compile(optimizer = optimizer, loss = 'binary_crossentropy')
     print(model.summary())
 
