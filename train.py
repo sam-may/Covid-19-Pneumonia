@@ -18,6 +18,7 @@ helper = train_helper.Train_Helper(
             input       = args.input,
             tag         = args.tag,
             train_frac  = 0.75,
+            fast        = False,
 )
 
 helper.load_data()

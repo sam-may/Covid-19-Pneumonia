@@ -154,24 +154,25 @@ def plot_image_truth_and_pred(image, truth, pred, name):
     ax = fig.add_subplot(234)
     plt.imshow(image_scaled, cmap = 'gray')
     x, y, cmap, levels = make_heatmap(truth)
-    heatmap = plt.contourf(x, y, truth, cmap = cmap, levels = levels)
+    heatmap = plt.contourf(x, y, truth.transpose(), cmap = cmap, levels = levels)
     cbar = plt.colorbar(heatmap)
     plt.title('Original + Truth', fontsize = fs)
 
     ax = fig.add_subplot(235)
     plt.imshow(image_scaled, cmap = 'gray')
     x, y, cmap, levels = make_heatmap(pred)
-    heatmap = plt.contourf(x, y, pred, cmap = cmap, levels = levels)
+    heatmap = plt.contourf(x, y, pred.transpose(), cmap = cmap, levels = levels)
     cbar = plt.colorbar(heatmap)
     plt.title('Original + Prediction', fontsize = fs)
 
     ax = fig.add_subplot(236)
     plt.imshow(image_scaled, cmap = 'gray')
     x, y, cmap, levels = make_heatmap(truth - pred, True)
-    heatmap = plt.contourf(x, y, truth - pred, cmap = cmap, levels = levels)
+    heatmap = plt.contourf(x, y, (truth - pred).transpose(), cmap = cmap, levels = levels)
     cbar = plt.colorbar(heatmap)
     plt.title('Truth - Prediction', fontsize = fs)
 
+    plt.tight_layout()
     plt.savefig('plots/unet_assessment_%s.pdf' % name)
     plt.close(fig)
     

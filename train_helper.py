@@ -14,6 +14,8 @@ class Train_Helper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
+        self.fast           = kwargs.get('fast', False)
+
         self.input          = kwargs.get('input')
         self.tag            = kwargs.get('tag')
         self.verbose        = kwargs.get('verbose', True)
@@ -21,7 +23,7 @@ class Train_Helper():
         self.train_frac     = kwargs.get('train_frac', 0.5)
 
         self.unet_config    = kwargs.get('unet_config', {
-                                            "n_filters" : 12,
+                                            "n_filters" : 24,
                                             "n_layers_conv" : 1,
                                             "n_layers_unet" : 4,
                                             "kernel_size" : 3,
@@ -36,7 +38,7 @@ class Train_Helper():
     
         self.increase_batch = False
         self.batch_size = 16
-        self.max_epochs = 1
+        self.max_epochs = 20
 
         self.n_assess = 10
 
@@ -69,6 +71,11 @@ class Train_Helper():
         self.patients_train = patients_shuffle[:self.n_train]
         self.patients_test  = patients_shuffle[self.n_train:]
 
+        if self.fast:
+            self.patients_train = [self.patients_train[0]]
+            self.patients_test = [self.patients_test[0]]
+            
+
         self.X_train, self.y_train = self.load_features(self.patients_train)
         self.X_test, self.y_test = self.load_features(self.patients_test)
 
@@ -93,7 +100,7 @@ class Train_Helper():
         self.train_with_early_stopping()
 
     def train_with_early_stopping(self):
-        self.weights_file = "weights/" + self.tag + "_weights_{epcoh:02d}.hdf5"
+        self.weights_file = "weights/" + self.tag + "_weights_{epoch:02d}.hdf5"
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file) # save after every epoch
         callbacks_list = [checkpoint]
 
@@ -153,6 +160,8 @@ class Train_Helper():
         X = []
         y = []
 
+        self.n_pixels = numpy.array(self.file[patients[0] + "_X"]).shape[1]
+
         for patient in patients:
             if len(X) == 0:
                 X = numpy.array(self.file[patient + "_X"])
@@ -173,9 +182,9 @@ class Train_Helper():
     def assess(self): # make plots of original | truth | pred \\ original + truth | original + pred | original + (pred - truth)
         random_idx = numpy.random.randint(0, self.n_instance_test, self.n_assess) 
         for idx, rand_idx in zip(range(self.n_assess), random_idx):
-            image = self.X_test[rand_idx].reshape([-1, self.n_pixels, self.n_pixels])
-            truth = self.y_test[rand_idx].reshape([-1, self.n_pixels, self.n_pixels])
-            pred  = self.summary["predictions"][-1][rand_idx].reshape([-1, self.n_pixels, self.n_pixels])
+            image = self.X_test[rand_idx].reshape([self.n_pixels, self.n_pixels])
+            truth = self.y_test[rand_idx].reshape([self.n_pixels, self.n_pixels])
+            pred  = self.summary["predictions"][-1][rand_idx].reshape([self.n_pixels, self.n_pixels])
 
             utils.plot_image_truth_and_pred(image, truth, pred, "comp_%d" % idx)
 
