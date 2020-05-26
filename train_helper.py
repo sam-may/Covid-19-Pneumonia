@@ -42,7 +42,7 @@ class Train_Helper():
         self.max_batch  = 64
         self.max_epochs = 20
 
-        self.n_assess = 10
+        self.n_assess = 25
 
         # initialize places to store results
         self.summary = {
