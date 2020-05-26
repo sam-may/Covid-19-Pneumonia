@@ -23,21 +23,23 @@ class Train_Helper():
         self.train_frac     = kwargs.get('train_frac', 0.5)
 
         self.unet_config    = kwargs.get('unet_config', {
-                                            "n_filters" : 24,
+                                            "n_filters" : 16,
                                             "n_layers_conv" : 1,
                                             "n_layers_unet" : 4,
-                                            "kernel_size" : 3,
-                                            "dropout" : 0.1,
+                                            "kernel_size" : 4,
+                                            "dropout" : 0.2,
                                             "batch_norm" : True,
-                                            "learning_rate" : 0.001,
+                                            "learning_rate" : 0.0005,
                                         })
 
         self.best_loss = 999999
         self.delta = 0.01 # percent by which loss must improve to be considered an improvement
-        self.early_stopping_rounds = 3
+        self.early_stopping_rounds = 2
     
         self.increase_batch = False
+        self.decay_learning_rate = False
         self.batch_size = 16
+        self.max_batch  = 64
         self.max_epochs = 20
 
         self.n_assess = 10
@@ -117,7 +119,7 @@ class Train_Helper():
                        callbacks = callbacks_list,
                        validation_data = (self.X_test, self.y_test))
 
-            prediction = self.model.predict([self.X_test], batch_size = 1024)
+            prediction = self.model.predict([self.X_test], batch_size = 128)
             self.summary["predictions"].append(prediction)
     
             # TODO: evaluate all metrics with prediction and append to summary
@@ -137,7 +139,7 @@ class Train_Helper():
                 print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f), incrementing bad epochs by 1." % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) ) 
                 self.bad_epochs += 1
 
-            if self.increase_batch and self.bad_epochs >= 1: # increase batch size (decay learning rate as well?)
+            if (self.increase_batch or self.decay_learning_rate) and self.bad_epochs >= 1: # increase batch size (decay learning rate as well?)
                 if self.batch_size * 4 <= self.max_batch:
                     print("[TRAIN_HELPER] Increasing batch size from %d -> %d, resetting bad epochs to 0, and continuing for another epoch." % (self.batch_size, self.batch_size * 4))
                     self.batch_size *= 4

@@ -1,3 +1,5 @@
+import setGPU
+
 import os, sys
 
 import numpy

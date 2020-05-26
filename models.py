@@ -23,7 +23,7 @@ def cnn(n_pixels, config):
 
     return model
 
-def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool = 2, dropout = 0.25, batch_norm = True, activation = 'relu', conv_dict = {}):
+def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool = 2, dropout = 0.25, batch_norm = True, activation = 'elu', conv_dict = {}):
     conv = input_img
 
     for i in range(n_layers):
