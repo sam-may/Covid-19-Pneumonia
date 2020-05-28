@@ -36,7 +36,14 @@ class Data_Helper():
     def prep(self):
         self.find_patients()
 
+        ctr = 0
         for patient, data in self.patients.items():
+            ctr += 1
+            print("[DATA_HELPER] On patient %d out of %d (%.1f%%)" % (ctr, len(self.patients.keys()), (100. * float(ctr)) / float(len(self.patients.keys()))))
+            
+            if os.path.exists(self.output_file(patient)):
+                print("[DATA_HELPER] File %s already exists, we will continue and not remake it." % self.output_file(patient)) 
+                continue
             self.load_data(patient)
             self.assess(patient, 10, "raw")
             self.downsample_data(patient)
@@ -57,18 +64,22 @@ class Data_Helper():
                     "y" : []
             }
 
-
     def load_data(self, patient):
         for subdir in self.patients[patient]["inputs"]:
             print("[DATA_HELPER] Extracting data from directory %s" % subdir)
             X = utils.load_dcms(glob.glob(subdir + "/*.dcm"))
             y = utils.load_nii(subdir + "/ct_mask_covid_edited.nii")
+            if X is None or y is None:
+                print("[DATA_HELPER] Did not load features or labels from directory %s, skipping." % subdir)
+                continue
             if X.shape != y.shape:
                 print("[DATA_HELPER] Input features have shape %s but label has shape %s -- please check!" % (str(X.shape), str(y.shape)))
-                sys.exit(1)
+                #sys.exit(1)
+                continue
             if X.shape[1] < self.min_size:
                 print("[DATA_HELPER] Images are assumed to be at least %d x %d pixels, but this image is %d x %d pixels -- please check!" % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
-                sys.exit(1)
+                #sys.exit(1)
+                continue
             elif X.shape[1] > self.min_size:
                 print("[DATA_HELPER] Images are assumed to be as small as %d x %d pixels, and this image is %d x %d pixels, so we resize it down to be compatible with the rest." % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
                 X = utils.downsample_images(X, self.min_size)
@@ -145,8 +156,11 @@ class Data_Helper():
 
         return numpy.mean(pixel_values), numpy.std(pixel_values)
 
+    def output_file(self, patient):
+        return self.output.replace("features.hdf5", "features_%s.hdf5" % patient)
+
     def write(self, patient):
-        f_name = self.output.replace("features.hdf5", "features_%s.hdf5" % patient)
+        f_name = self.output_file(patient)
 
         f_out = h5py.File(f_name, "w")
         f_out.create_dataset("%s_X" % patient, data = self.patients[patient]["X"])

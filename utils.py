@@ -15,6 +15,9 @@ import pydicom
 import nibabel
 
 def load_dcms(files):
+    if not len(files) >= 1:
+        return None
+    
     ct_slices = []
     for file in files:
         f = pydicom.dcmread(file)
@@ -37,6 +40,9 @@ def sort(slices):
     return list(numpy.array(slices)[idx_sorted])
 
 def load_nii(file):
+    if not os.path.exists(file):
+        return None
+
     label = nibabel.load(file).get_fdata()
     label = numpy.flip(numpy.rot90(label, -1), 1)
 
