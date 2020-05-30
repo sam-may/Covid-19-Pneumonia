@@ -20,16 +20,16 @@ class Train_Helper():
         self.tag            = kwargs.get('tag')
         self.verbose        = kwargs.get('verbose', True)
 
-        self.train_frac     = kwargs.get('train_frac', 0.5)
+        self.train_frac     = kwargs.get('train_frac', 0.7)
 
         self.unet_config    = kwargs.get('unet_config', {
                                             "n_filters" : 16,
                                             "n_layers_conv" : 1,
-                                            "n_layers_unet" : 4,
-                                            "kernel_size" : 4,
-                                            "dropout" : 0.2,
-                                            "batch_norm" : True,
-                                            "learning_rate" : 0.0005,
+                                            "n_layers_unet" : 3,
+                                            "kernel_size" : 3,
+                                            "dropout" : 0.0,
+                                            "batch_norm" : False,
+                                            "learning_rate" : 0.00005,
                                         })
 
         self.best_loss = 999999
@@ -39,8 +39,8 @@ class Train_Helper():
         self.increase_batch = False
         self.decay_learning_rate = False
         self.batch_size = 16
-        self.max_batch  = 64
-        self.max_epochs = 20
+        self.max_batch  = 16
+        self.max_epochs = 10
 
         self.n_assess = 25
 

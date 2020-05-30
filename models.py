@@ -82,13 +82,13 @@ def unet(config):
     conv_dict = { 'input_img' : conv }
 
     for i in range(n_layers_unet):
-        conv = std_conv(str(i), conv, n_layers_conv, n_filters * (2**i), kernel_size, dropout = dropout, conv_dict = conv_dict)
+        conv = std_conv(str(i), conv, n_layers_conv, n_filters * (2**i), kernel_size, dropout = dropout, conv_dict = conv_dict, batch_norm = batch_norm)
 
-    conv = std_conv('bottom_conv', conv, n_layers_conv, n_filters * (2**n_layers_unet), kernel_size, 1, dropout = dropout)
+    conv = std_conv('bottom_conv', conv, n_layers_conv, n_filters * (2**n_layers_unet), kernel_size, 1, dropout = dropout, batch_norm = batch_norm)
 
     for i in range(n_layers_unet):
         conv = up_conv(str(i), conv, 1, n_filters, kernel_size, conv_dict['std_conv_%d' % (n_layers_unet - (i+1))], dropout = dropout)
-        conv = std_conv('lateral_%s' % i, conv, n_layers_conv, n_filters * (2**(n_layers_unet - (i+1))), kernel_size, 1, dropout = dropout)
+        conv = std_conv('lateral_%s' % i, conv, n_layers_conv, n_filters * (2**(n_layers_unet - (i+1))), kernel_size, 1, dropout = dropout, batch_norm = batch_norm)
 
     output = std_conv('out', conv, 1, 1, kernel_size, 1, dropout = 0, batch_norm = False, activation = 'sigmoid') 
 

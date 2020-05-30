@@ -19,7 +19,7 @@ import train_helper
 helper = train_helper.Train_Helper(
             input       = args.input,
             tag         = args.tag,
-            train_frac  = 0.75,
+            train_frac  = 0.7,
             fast        = False,
 )
 
