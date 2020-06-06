@@ -70,62 +70,6 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-#class DataGenerator(keras.utils.Sequence):
-#    def __init__(self, patients, train_helper, batch_size=16):
-#        self.batch_size = batch_size
-#        self.train_helper = train_helper
-#        self.patients = patients
-#        self.n_instances = -1
-#        self.last_patient = -1
-
-#    def __len__(self): # Denotes the number of batches per epoch
-#        if self.n_instances > 0:
-#            return self.n_instances // self.batch_size
-
-#        print("[DATA_GENERATOR] Counting total number of training instances.")
-
-#        self.n_instances = 0
-#        self.patient_info = {}
-#        for patient in self.patients:
-#            X, y = self.train_helper.load_from_file(patient)
-#            self.patient_info[patient] = { "indexes" : [self.n_instances, self.n_instances + (len(X) - 1)] , "steps" : len(X) // self.batch_size } 
-#            self.n_instances += len(X)
-#            print("[DATA_GENERATOR] On patient %s, so far have %d instances." % (patient, self.n_instances))
-
-#        print("[DATA_GENERATOR] %d patients, %d instances, %d batches" % (len(self.patients), self.n_instances, self.n_instances // self.batch_size))
-#        return self.n_instances // self.batch_size
-
-#    def find_patient(self, index):
-#        instance_idx = index 
-#        for patient in self.patients:
-#            if instance_idx >= self.patient_info[patient]["indexes"][0] and instance_idx <= self.patient_info[patient]["indexes"][1]:
-#                if instance_idx + self.batch_size >= self.patient_info[patient]["indexes"][1]:
-#                    return patient, True
-#                else:
-#                    return patient, False 
-
-#    def __getitem__(self, index):
-#        patient, split = self.find_patient(index*self.batch_size)
-#        if not patient == self.last_patient: # new patient
-#            self.X, self.y = self.train_helper.load_features([patient])
-#        self.last_patient = patient
-
-#        if not split:
-#            return self.X[index*self.batch_size:(index+1)*self.batch_size], self.y[index*self.batch_size:(index+1)*self.batch_size]
-#        else:
-#            X = self.X[index*self.batch_size:]
-#            y = self.y[index*self.batch_size:]
-            
-#            remainder = self.batch_size - len(X)
-
-#            next_patient, dummy = self.find_patient((index*self.batch_size) + len(X))
-#            self.X, self.y = self.train_helper.load_features([next_patient])
-#            self.last_patient = next_patient
-        
-#            X = numpy.concatenate([X, self.X[:remainder]])
-#            y = numpy.concatenate([y, self.y[:remainder]])
-#            return X, y 
-
 class Train_Helper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -177,17 +121,6 @@ class Train_Helper():
         with open(self.input_metadata, "r") as f_in:
             self.metadata = json.load(f_in)
 
-
-        #if ".hdf5" in self.input:
-        #    self.files = [self.input]
-        #    if self.verbose:
-        #        print("[TRAIN_HELPER] Loading file %s" % self.input)
-
-        #else:
-        #    self.files = glob.glob(self.input + "/*.hdf5")
-        #    if self.verbose:
-        #        print("[TRAIN_HELPER] Loading %d hdf5 files from directory %s" % (len(self.files), self.input))
-
         self.get_patients()
 
         self.n_train = int(self.train_frac * float(len(self.patients)))
@@ -235,12 +168,6 @@ class Train_Helper():
 
             if self.verbose:
                 print("[TRAIN_HELPER] On %d-th epoch of training model" % self.n_epochs)
-
-
-            #results = self.model.fit_generator(generator=self.train_generator,
-            #        validation_data=self.validation_generator,
-            #        use_multiprocessing=False,
-            #        workers=12) 
 
             results = self.model.fit(
                        self.train_generator,
@@ -296,39 +223,10 @@ class Train_Helper():
             self.n_pixels = X.shape[1]
             self.unet_config["n_pixels"] = self.n_pixels
 
-    #def get_patients(self):
-    #    keys = []
-    #    for file in self.files:
-    #        f = h5py.File(file, "r")
-    #        if f is not None:
-    #            print("[TRAIN_HELPER] Successfully opened file %s" % file)
-    #            print("[TRAIN_HELPER] Found keys: ", f.keys())
-    #            keys += f.keys()
-    #            if self.n_pixels == -1:
-    #                key_X = [key for key in f.keys() if "_X" in key][0]
-    #                X = numpy.array(f[key_X])
-    #                self.n_pixels = X.shape[1]
-    #                self.unet_config["n_pixels"] = self.n_pixels
-    #        else:
-    #            print("[TRAIN_HELPER] Error opening file %s" % file)
-    #        
-    #    self.patients = [key.replace("_X", "") for key in keys if "_X" in key]
-    #
-    #    self.file_dict = {}
-    #    for patient in self.patients:
-    #        file = self.input + "/features_%s.hdf5" % patient 
-    #        self.file_dict[patient] = { "file" : file, "X" : patient + "_X", "y" : patient + "_y" }
-
-    #    print("[TRAIN_HELPER] Found %d patients features and labels" % len(self.patients))
-
     def load_from_file(self, patient):
         f_in = h5py.File(self.file_dict[patient]["file"], "r")
         X = numpy.array(f_in[self.file_dict[patient]["X"]])
         y = numpy.array(f_in[self.file_dict[patient]["y"]])
-
-        #if self.n_pixels == -1:
-        #    self.n_pixels = X.shape[1]
-        #    self.unet_config["n_pixels"] = self.n_pixels
 
         return X, y
 
@@ -360,7 +258,4 @@ class Train_Helper():
             pred  = self.summary["predictions"][-1][rand_idx].reshape([self.n_pixels, self.n_pixels])
 
             utils.plot_image_truth_and_pred(image, truth, pred, "comp_%d" % idx)
-
-        
-
 
