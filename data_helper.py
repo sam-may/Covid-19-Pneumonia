@@ -29,8 +29,9 @@ class Data_Helper():
         if os.path.exists(self.output_dir):
             print("[DATA_HELPER] Cleaning old contents in directory: %s" % self.output_dir)
             os.system("rm -rf %s" % self.output_dir)
-            os.system("mkdir %s" % self.output_dir)
-            os.system("mkdir %s" % self.output_dir + "/images/")
+
+        os.system("mkdir %s" % self.output_dir)
+        os.system("mkdir %s" % self.output_dir + "/images/")
 
         self.output = self.output_dir + "features.hdf5"
 
@@ -73,7 +74,7 @@ class Data_Helper():
 
     def find_patients(self):
         self.patients = {}
-        for dir in glob.glob(self.input_dir_wuhan + "/patient11*/"):
+        for dir in glob.glob(self.input_dir_wuhan + "/patient*/"):
             patient = dir.split("/")[-2]
             self.patients[patient] = {
                     "inputs" : glob.glob(dir + "*/"),
