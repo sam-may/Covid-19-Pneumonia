@@ -19,9 +19,13 @@ args = parser.parse_args()
 
 import data_helper
 
-input_dir = "/public/smay/covid_ct_data/"
+input_dir_wuhan = "/public/smay/covid_ct_data/wuhan/"
+input_dir_russia = "/public/smay/covid_ct_data/russia/"
+
 helper = data_helper.Data_Helper(
-            input_dir   = input_dir,
+            input_dir_wuhan   = input_dir_wuhan,
+            input_dir_russia  = input_dir_russia,
+
             tag         = args.tag,
             downsample  = args.downsample,
 )

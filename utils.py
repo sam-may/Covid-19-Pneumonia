@@ -32,7 +32,7 @@ def load_dcms(files):
     ct_slices.reverse() # do I need this?
     for ct_slice in ct_slices:
         ct_slices_.append(ct_slice.pixel_array)
-    return numpy.array(ct_slices_).astype(numpy.float64)
+    return numpy.array(ct_slices_).astype(numpy.float32)
 
 def sort(slices):
     slice_locs = [float(s.SliceLocation) for s in slices]
@@ -50,7 +50,7 @@ def load_nii(file):
     for i in range(len(label[0,0])):
         label_.append(label[:,:,i])
 
-    return numpy.array(label_).astype(numpy.float64)
+    return numpy.array(label_).astype(numpy.float32)
 
 def power_of_two(n):
     return math.log2(n).is_integer()
