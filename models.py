@@ -1,6 +1,8 @@
 import tensorflow as tf
 import tensorflow.keras as keras
 
+import metrics
+
 def cnn(n_pixels, config):
     input_img = keras.layers.Input(shape=(n_pixels, n_pixels,1), name = 'input_img')
 
@@ -31,6 +33,7 @@ def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool = 2, dr
                 activation = activation,
                 kernel_initializer = 'lecun_uniform',
                 padding = 'same',
+                kernel_constraint = keras.constraints.max_norm(10),
                 name = 'std_conv_%s_%d' % (name, i))(conv)
 
         if dropout > 0:
@@ -54,6 +57,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image = None,
         conv = keras.layers.Conv2DTranspose(n_filters, kernel_size,
                 strides = 2,
                 padding = 'same',
+                kernel_constraint = keras.constraints.max_norm(10),
                 name = 'up_conv_%s_%d' % (name, i))(conv)
 
         if dropout > 0:
@@ -76,6 +80,7 @@ def unet(config):
     dropout             = config["dropout"]
     batch_norm          = config["batch_norm"]
     learning_rate       = config["learning_rate"]
+    alpha               = config["alpha"]
 
     input_img = keras.layers.Input(shape=(n_pixels, n_pixels, 1), name = 'input_img')
     conv = input_img
@@ -94,7 +99,7 @@ def unet(config):
 
     model = keras.models.Model(inputs = [input_img], outputs = [output])
     optimizer = keras.optimizers.Adam(lr = learning_rate)
-    model.compile(optimizer = optimizer, loss = 'binary_crossentropy')
+    model.compile(optimizer = optimizer, loss = metrics.weighted_crossentropy(alpha), metrics = ['accuracy', metrics.dice_loss])
     print(model.summary())
 
     return model

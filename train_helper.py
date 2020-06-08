@@ -8,18 +8,21 @@ import json
 from timeit import default_timer as timer
 
 import models
+import metrics
 import utils
+
 
 import tensorflow
 import tensorflow.keras as keras
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, file, n_pixels, patients, metadata, batch_size = 16):
+    def __init__(self, file, n_pixels, patients, metadata, batch_size = 16, verbose = False):
         self.batch_size = batch_size
         self.metadata = metadata
         self.patients = patients
         self.file = file
         self.n_pixels = n_pixels
+        self.verbose = verbose
 
         self.n_instances = -1
 
@@ -51,7 +54,8 @@ class DataGenerator(keras.utils.Sequence):
         return pt, idx
 
     def __getitem__(self, index):
-        start = timer()
+        if self.verbose:
+            start = timer()
         for i in range(self.batch_size):
             X_, y_ = self.get_random_slice()
 
@@ -65,8 +69,9 @@ class DataGenerator(keras.utils.Sequence):
         X = X.reshape([-1, self.n_pixels, self.n_pixels, 1])
         y = y.reshape([-1, self.n_pixels, self.n_pixels, 1])
 
-        end = timer()
-        print("[DATA_GENERATOR] Took %.6f seconds to load batch" % (end - start))
+        if self.verbose:
+            end = timer()
+            print("[DATA_GENERATOR] Took %.6f seconds to load batch" % (end - start))
 
         return X, y
 
@@ -84,13 +89,14 @@ class Train_Helper():
         self.train_frac     = kwargs.get('train_frac', 0.7)
 
         self.unet_config    = kwargs.get('unet_config', {
-                                            "n_filters" : 16,
+                                            "n_filters" : 32,
                                             "n_layers_conv" : 1,
                                             "n_layers_unet" : 3,
-                                            "kernel_size" : 3,
-                                            "dropout" : 0.0,
+                                            "kernel_size" : 4,
+                                            "dropout" : 0.25,
                                             "batch_norm" : False,
-                                            "learning_rate" : 0.00005,
+                                            "learning_rate" : 0.00001,
+                                            "alpha" : 1.,
                                         })
 
         self.best_loss = 999999
@@ -101,7 +107,7 @@ class Train_Helper():
         self.decay_learning_rate = False
         self.batch_size = 16
         self.max_batch  = 16
-        self.max_epochs = 10
+        self.max_epochs = 25
 
         self.n_assess = 25
         self.n_pixels = -1
@@ -112,8 +118,8 @@ class Train_Helper():
                 "train_frac"    : self.train_frac,
                 "config"        : self.unet_config,
                 "predictions"   : [],
-                "metrics"       : { "binary_crossentropy" : [], "dice" : [] },
-                "metrics_train" : { "binary_crossentropy" : [], "dice" : [] },
+                "metrics"       : { "loss" : [], "dice_loss" : [], "accuracy" : []},
+                "metrics_train" : { "loss" : [], "dice_loss" : [], "accuracy" : []},
         }
 
     def load_data(self):
@@ -123,6 +129,8 @@ class Train_Helper():
 
         self.get_patients()
 
+        self.calculate_pneumonia_imbalance()
+
         self.n_train = int(self.train_frac * float(len(self.patients)))
         self.n_test  = len(self.patients) - self.n_train
 
@@ -131,6 +139,20 @@ class Train_Helper():
 
         self.patients_train = patients_shuffle[:self.n_train]
         self.patients_test  = patients_shuffle[self.n_train:]
+
+    def calculate_pneumonia_imbalance(self):
+        pneumonia_pixels = 0
+        all_pixels = 0
+        
+        for pt in self.patients:
+            for entry in self.metadata[pt]:
+                pneumonia_pixels += float(entry["n_pneumonia"])
+                all_pixels += float(self.n_pixels ** 2)
+
+        self.pneumonia_fraction = pneumonia_pixels / all_pixels
+        print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" % self.pneumonia_fraction)
+
+        self.unet_config["alpha"] = 1. / self.pneumonia_fraction
 
     def load_weights(self, weights):
         if self.model is not None:
@@ -157,6 +179,7 @@ class Train_Helper():
 
         train_more = True
         self.n_epochs = 0
+        self.bad_epochs = 0
 
         self.train_generator = DataGenerator(file = self.file, metadata = self.metadata,
                 patients = self.patients_train, batch_size = self.batch_size, n_pixels = self.n_pixels)
@@ -176,16 +199,16 @@ class Train_Helper():
                        #max_queue_size = 100,
                        validation_data = self.validation_generator)
 
-            prediction = self.model.predict([self.X_test], batch_size = 128)
-            self.summary["predictions"].append(prediction)
+            #prediction = self.model.predict(self.validation_generator)
+            #self.summary["predictions"].append(prediction)
     
             # TODO: evaluate all metrics with prediction and append to summary
 
             val_loss = results.history['val_loss'][0]
-            train_loss = results.history['loss'][0]
 
-            self.summary["metrics"]["binary_crossentropy"].append(val_loss)
-            self.summary["metrics_train"]["binary_crossentropy"].append(train_loss)
+            for metric in ["loss", "accuracy", "dice_loss"]:
+                self.summary["metrics"][metric].append(results.history['val_' + metric][0])
+                self.summary["metrics_train"][metric].append(results.history[metric][0])
 
             if (val_loss * (1. + self.delta)) < self.best_loss:
                 print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f), continuing for another epoch" % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) )
@@ -209,6 +232,9 @@ class Train_Helper():
             if self.max_epochs > 0 and self.n_epochs >= self.max_epochs:
                 print("[TRAIN_HELPER] Maximum number of training epochs (%d) reached. Stopping training." % (self.max_epochs))
                 train_more = False
+
+        with open("results_%s.json" % self.tag, "w") as f_out:
+            json.dump(self.summary, f_out, indent = 4, sort_keys = True) 
 
     def get_patients(self):
         self.patients = [pt for pt in self.metadata.keys() if "patient" in pt]
@@ -251,11 +277,13 @@ class Train_Helper():
         self.model = models.unet(self.unet_config)
 
     def assess(self): # make plots of original | truth | pred \\ original + truth | original + pred | original + (pred - truth)
-        random_idx = numpy.random.randint(0, self.n_instance_test, self.n_assess) 
-        for idx, rand_idx in zip(range(self.n_assess), random_idx):
-            image = self.X_test[rand_idx].reshape([self.n_pixels, self.n_pixels])
-            truth = self.y_test[rand_idx].reshape([self.n_pixels, self.n_pixels])
-            pred  = self.summary["predictions"][-1][rand_idx].reshape([self.n_pixels, self.n_pixels])
+        X, y = self.validation_generator.__getitem__(0)
+        preds = self.model.predict(X, batch_size = 16)
+        idx = 0
+        for image, truth, pred in zip(X, y, preds):
+            image = image.reshape([self.n_pixels, self.n_pixels])
+            truth = truth.reshape([self.n_pixels, self.n_pixels])
+            pred  = pred.reshape([self.n_pixels, self.n_pixels])       
 
             utils.plot_image_truth_and_pred(image, truth, pred, "comp_%d" % idx)
-
+            idx += 1
