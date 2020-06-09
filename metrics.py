@@ -16,7 +16,3 @@ def dice_loss(y_true, y_pred):
     denominator = tf.reduce_sum(y_true + y_pred)
 
     return 1 - (numerator / denominator)
-    #return 1 - (numerator + 1) / (denominator + 1)
-
-#def dice_coefficient(y_true, y_pred):
-#    return

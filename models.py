@@ -100,6 +100,7 @@ def unet(config):
     model = keras.models.Model(inputs = [input_img], outputs = [output])
     optimizer = keras.optimizers.Adam(lr = learning_rate)
     model.compile(optimizer = optimizer, loss = metrics.weighted_crossentropy(alpha), metrics = ['accuracy', metrics.dice_loss])
+    #model.compile(optimizer = optimizer, loss = 'binary_crossentropy', metrics = ['accuracy', metrics.dice_loss])
     print(model.summary())
 
     return model

@@ -89,13 +89,13 @@ class Train_Helper():
         self.train_frac     = kwargs.get('train_frac', 0.7)
 
         self.unet_config    = kwargs.get('unet_config', {
-                                            "n_filters" : 32,
+                                            "n_filters" : 12,
                                             "n_layers_conv" : 1,
                                             "n_layers_unet" : 3,
                                             "kernel_size" : 4,
-                                            "dropout" : 0.25,
+                                            "dropout" : 0.0,
                                             "batch_norm" : False,
-                                            "learning_rate" : 0.00001,
+                                            "learning_rate" : 0.00005,
                                             "alpha" : 1.,
                                         })
 
@@ -103,10 +103,10 @@ class Train_Helper():
         self.delta = 0.01 # percent by which loss must improve to be considered an improvement
         self.early_stopping_rounds = 2
     
-        self.increase_batch = False
+        self.increase_batch = True
         self.decay_learning_rate = False
-        self.batch_size = 16
-        self.max_batch  = 16
+        self.batch_size = 8
+        self.max_batch  = 128
         self.max_epochs = 25
 
         self.n_assess = 25
@@ -181,12 +181,12 @@ class Train_Helper():
         self.n_epochs = 0
         self.bad_epochs = 0
 
-        self.train_generator = DataGenerator(file = self.file, metadata = self.metadata,
+        while train_more:
+            self.train_generator = DataGenerator(file = self.file, metadata = self.metadata,
                 patients = self.patients_train, batch_size = self.batch_size, n_pixels = self.n_pixels)
-        self.validation_generator = DataGenerator(file = self.file, metadata = self.metadata,
+            self.validation_generator = DataGenerator(file = self.file, metadata = self.metadata,
                 patients = self.patients_test, batch_size = self.batch_size, n_pixels = self.n_pixels)
 
-        while train_more:
             self.n_epochs += 1
 
             if self.verbose:
