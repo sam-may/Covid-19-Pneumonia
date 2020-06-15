@@ -7,6 +7,8 @@ import json
 import random
 import math
 
+from sklearn.metrics import roc_curve, auc
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
@@ -197,4 +199,37 @@ def plot_image_truth_and_pred(image, truth, pred, name):
     #plt.tight_layout()
     plt.savefig('plots/unet_assessment_%s.pdf' % name, bbox_inches='tight')
     plt.close(fig)
+
+def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.yaxis.set_ticks_position('both')
+    ax1.grid(True)
     
+    ax1.plot(fpr_mean, 
+             tpr_mean,
+             color = 'blue', 
+             label = "U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std))
+    ax1.fill_between(fpr_mean,
+                     tpr_mean - (tpr_std/2.),
+                     tpr_mean + (tpr_std/2.),
+                     color = 'blue',
+                     alpha = 0.25, label = r'$\pm 1\sigma$')
+    
+    plt.xlim([-0.05,1.05])
+    plt.ylim([-0.05,1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend(loc = "lower right")
+    plt.savefig("plots/roc_comparison_%s.pdf" % tag)
+    plt.close(fig)
+   
+def calc_auc(y, pred, interp = 100):
+    fpr, tpr, thresh = roc_curve(y, pred)
+
+    fpr_interp = numpy.linspace(0, 1, interp)
+    tpr_interp = numpy.interp(fpr_interp, fpr, tpr)
+
+    auc_ = auc(fpr, tpr)
+
+    return fpr_interp, tpr_interp, auc_ 

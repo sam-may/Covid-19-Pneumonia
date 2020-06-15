@@ -11,7 +11,6 @@ import models
 import metrics
 import utils
 
-
 import tensorflow
 import tensorflow.keras as keras
 
@@ -90,7 +89,7 @@ class Train_Helper():
 
         self.unet_config    = kwargs.get('unet_config', {
                                             "n_filters" : 12,
-                                            "n_layers_conv" : 1,
+                                            "n_layers_conv" : 2,
                                             "n_layers_unet" : 3,
                                             "kernel_size" : 4,
                                             "dropout" : 0.0,
@@ -105,9 +104,9 @@ class Train_Helper():
     
         self.increase_batch = True
         self.decay_learning_rate = False
-        self.batch_size = 8
+        self.batch_size = 16
         self.max_batch  = 128
-        self.max_epochs = 25
+        self.max_epochs = 1
 
         self.n_assess = 25
         self.n_pixels = -1
@@ -152,7 +151,7 @@ class Train_Helper():
         self.pneumonia_fraction = pneumonia_pixels / all_pixels
         print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" % self.pneumonia_fraction)
 
-        self.unet_config["alpha"] = 1. / self.pneumonia_fraction
+        #self.unet_config["alpha"] = 1. / self.pneumonia_fraction
 
     def load_weights(self, weights):
         if self.model is not None:
@@ -185,7 +184,7 @@ class Train_Helper():
             self.train_generator = DataGenerator(file = self.file, metadata = self.metadata,
                 patients = self.patients_train, batch_size = self.batch_size, n_pixels = self.n_pixels)
             self.validation_generator = DataGenerator(file = self.file, metadata = self.metadata,
-                patients = self.patients_test, batch_size = self.batch_size, n_pixels = self.n_pixels)
+                patients = self.patients_test, batch_size = 128, n_pixels = self.n_pixels)
 
             self.n_epochs += 1
 
@@ -275,6 +274,39 @@ class Train_Helper():
 
     def initialize_model(self):
         self.model = models.unet(self.unet_config)
+
+    def make_roc_curve(self):
+        self.tprs = []
+        self.fprs = []
+        self.aucs = []
+
+        for i in range(10):
+            y = []
+            pred = []
+            for j in range(10):
+                X, y_ = self.validation_generator.__getitem__(j)
+                pred_ = self.model.predict(X)
+
+                if j == 0:
+                    y = y_
+                    pred = pred_
+                else:
+                    y = numpy.concatenate([y, y_])
+                    pred = numpy.concatenate([pred, pred_])
+
+            fpr, tpr, auc = utils.calc_auc(y.flatten(), pred.flatten())
+            self.fprs.append(fpr)
+            self.tprs.append(tpr)
+            self.aucs.append(auc)
+
+        tpr_mean = numpy.mean(self.tprs, axis = 0)
+        tpr_std  = numpy.std( self.tprs, axis = 0)
+        fpr_mean = numpy.mean(self.fprs, axis = 0)
+        fpr_std  = numpy.std( self.fprs, axis = 0)
+        auc = numpy.mean(self.aucs)
+        auc_std = numpy.std(self.aucs)
+        
+        utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
 
     def assess(self): # make plots of original | truth | pred \\ original + truth | original + pred | original + (pred - truth)
         X, y = self.validation_generator.__getitem__(0)

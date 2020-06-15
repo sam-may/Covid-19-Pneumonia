@@ -27,4 +27,5 @@ helper = train_helper.Train_Helper(
 
 helper.load_data()
 helper.train()
+helper.make_roc_curve()
 helper.assess()
