@@ -106,7 +106,7 @@ class Train_Helper():
         self.decay_learning_rate = False
         self.batch_size = 8
         self.max_batch  = 128
-        self.max_epochs = 25
+        self.max_epochs = 1
 
         self.n_assess = 25
         self.n_pixels = -1
