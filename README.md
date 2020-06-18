@@ -1,14 +1,29 @@
 # Covid-19-Pneumonia
 Pneumonia segmentation model for CT scans. To be used in the context of covid-19 studies.
 
-# Setup: instructions for getting setup on the `prp-gpu-1.t2.ucsd.edu` machine (thanks to Javier Duarte)
-1. Install miniconda: `wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh`
-`bash Miniconda3-latest-Linux-x86_64.sh`
-2. Create an environment: `conda create -n tensorflow python=3.6` (this just creates an environment called ``tensorflow'')
-3. Enter environment: `conda activate tensorflow`
-4. Install tensorflow: `conda install -c anaconda tensorflow-gpu`
-5. Make sure tensorflow is installed properly and can see the GPUs. In python interpreter
-    - `import tensorflow as tf`
-    - `print(tf.__version__)`
-    - `print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))`
-6. Install other necessary python packages via `pip`: 
+## Setup: instructions for getting setup on the `prp-gpu-1.t2.ucsd.edu` machine
+1. Add the following lines to `~/.bashrc`:
+```
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/xilinx/scratch/software/miniconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/xilinx/scratch/software/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/xilinx/scratch/software/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/xilinx/scratch/software/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+```
+2. `mkdir ~/.conda`
+3. Create a file `~/.conda/environments.txt` and add these lines:
+```
+/xilinx/scratch/software/miniconda3
+/xilinx/scratch/software/miniconda3/envs/tensorflow
+```
+4. `source ~/.bashrc`
+5. `conda activate tensorflow`
