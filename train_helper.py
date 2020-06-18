@@ -95,7 +95,7 @@ class Train_Helper():
                                             "dropout" : 0.0,
                                             "batch_norm" : False,
                                             "learning_rate" : 0.00005,
-                                            "alpha" : 1.,
+                                            "alpha" : 3.,
                                         })
 
         self.best_loss = 999999
@@ -104,9 +104,9 @@ class Train_Helper():
     
         self.increase_batch = True
         self.decay_learning_rate = False
-        self.batch_size = 16
+        self.batch_size = 8
         self.max_batch  = 128
-        self.max_epochs = 1
+        self.max_epochs = 25
 
         self.n_assess = 25
         self.n_pixels = -1
@@ -206,8 +206,8 @@ class Train_Helper():
             val_loss = results.history['val_loss'][0]
 
             for metric in ["loss", "accuracy", "dice_loss"]:
-                self.summary["metrics"][metric].append(results.history['val_' + metric][0])
-                self.summary["metrics_train"][metric].append(results.history[metric][0])
+                self.summary["metrics"][metric].append(str(results.history['val_' + metric][0]))
+                self.summary["metrics_train"][metric].append(str(results.history[metric][0]))
 
             if (val_loss * (1. + self.delta)) < self.best_loss:
                 print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f), continuing for another epoch" % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) )
@@ -283,8 +283,8 @@ class Train_Helper():
         for i in range(10):
             y = []
             pred = []
-            for j in range(10):
-                X, y_ = self.validation_generator.__getitem__(j)
+            for j in range(3):
+                X, y_ = self.validation_generator.__getitem__((i*3)+j)
                 pred_ = self.model.predict(X)
 
                 if j == 0:
@@ -293,6 +293,9 @@ class Train_Helper():
                 else:
                     y = numpy.concatenate([y, y_])
                     pred = numpy.concatenate([pred, pred_])
+
+            #X, y = self.validation_generator.__getitem__(i)
+            #pred = self.model.predict(X)
 
             fpr, tpr, auc = utils.calc_auc(y.flatten(), pred.flatten())
             self.fprs.append(fpr)
