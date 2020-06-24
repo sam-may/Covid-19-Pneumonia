@@ -17,45 +17,79 @@ import cv2
 import pydicom
 import nibabel
 
-def load_dcms(files):
-    if not len(files) >= 1:
+def load_dcms(dcm_files, n=0):
+    """
+    Load DICOM (DCM) files and retrieve CT slices. Each DCM file
+    contains just one CT slice from a given CT scan.
+
+    Keyword arguments:
+    n -- the number of slices above and below slice of interest to include
+         as additional channels
+    """
+    if not len(dcm_files) >= 1:
         return None
     
     ct_slices = []
-    for file in files:
-        f = pydicom.dcmread(file)
-        if hasattr(f, 'SliceLocation'): # skip scout views
-            ct_slices.append(f)
+    for dcm_file in dcm_files:
+        file_data = pydicom.dcmread(dcm_file)
+        if hasattr(file_data, 'SliceLocation'):
+            ct_slices.append(file_data.pixel_array)
         else:
+            # skip scout views
             print("[UTILS.PY] load_dcms: found slice that is a scout view (?)")
 
-    ct_slices = sort(ct_slices)
-    
-    ct_slices_ = []
+    # Sort slices head-to-toe
+    slice_locs = [float(s.SliceLocation) for s in ct_slices]
+    idx_sorted = numpy.flipud(numpy.argsort(slice_locs))
+    ct_slices = list(numpy.array(ct_slices)[idx_sorted])
     ct_slices.reverse() # do I need this?
-    for ct_slice in ct_slices:
-        ct_slices_.append(ct_slice.pixel_array)
-    return numpy.array(ct_slices_).astype(numpy.float32)
 
-def sort(slices):
-    slice_locs = [float(s.SliceLocation) for s in slices]
-    idx_sorted = numpy.flipud(numpy.argsort(slice_locs)) # flip so we sort head to toe
-    return list(numpy.array(slices)[idx_sorted])
+    return get_multidim_slices(ct_slices, n)
 
-def load_nii(file):
-    if not os.path.exists(file):
+def load_nii(nii_file, n=0):
+    """
+    Decompress *.nii.gz files and retrieve CT slices. Each nii file contains
+    every CT slice from a single CT scan.
+
+    Keyword arguments:
+    n -- the number of slices above and below slice of interest to include
+         as additional channels
+    """
+    if not os.path.exists(nii_file):
         return None
 
-    label = nibabel.load(file).get_fdata()
-    label = numpy.flip(numpy.rot90(label, -1), 1)
+    file_data = nibabel.load(nii_file).get_fdata()
+    ct_slices = numpy.flip(numpy.rot90(file_data, -1), 1).T # sorted head-to-toe
 
-    label_ = []
-    for i in range(len(label[0,0])):
-        label_.append(label[:,:,i])
+    return get_multidim_slices(ct_slices, n)
 
-    return numpy.array(label_).astype(numpy.float32)
+def get_multidim_slices(ct_slices, n):
+    """
+    Returns one multi-channel image for each slice, where channels 
+    in [0,n) give the n slices below the slice of interest and
+    channels in (n,2n+1] give the n slices above.
+    """
+    multidim_ct_slices = [] # output array
+
+    n_slices = len(ct_slices)
+    for n_slice, ct_slice in enumerate(ct_slices):
+        # Collect n slices above and below current slice
+        ct_slice_stack = []
+        if n_slice > 0:
+            lowest_slice = max(0, n_slice-n)
+            ct_slice_stack += ct_slices[lowest_slice:n_slice] 
+        if n_slice < n_slices:
+            highest_slice = min(n_slices, n_slice+n)
+            ct_slice_stack += ct_slices[n_slice:highest_slice+1] # [n:m] -> [n,m)
+        # Stack the slices as one multi-channel image
+        stacked_ct_slices = np.dstack(ct_slice_stack)
+
+        multidim_ct_slices.append(stacked_ct_slices)
+
+    return numpy.array(multidim_ct_slices).astype(numpy.float32)
 
 def power_of_two(n):
+    """Returns True if n is a power of two"""
     return math.log2(n).is_integer()
 
 def downsample_images(images, downsample, round = False):
