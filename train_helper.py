@@ -42,14 +42,12 @@ class DataGenerator(keras.utils.Sequence):
     def __getitem__(self, index):
         if self.verbose:
             start = timer()
+        X = []
+        y = []
         for i in range(self.batch_size):
             X_, y_ = self.get_random_slice()
-            if i == 0:
-                X = X_
-                y = y_
-            else:
-                X = numpy.concatenate([X, X_])
-                y = numpy.concatenate([y, y_])
+            X.append(X_)
+            y.append(y_)
 
         if self.verbose:
             end = timer()
