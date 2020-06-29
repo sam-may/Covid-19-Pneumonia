@@ -7,7 +7,6 @@ import glob
 import json
 from timeit import default_timer as timer
 
-import models
 import metrics
 import utils
 
@@ -15,12 +14,14 @@ import tensorflow
 import tensorflow.keras as keras
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, file, n_pixels, patients, metadata, batch_size = 16, verbose = False):
-        self.batch_size = batch_size
-        self.metadata = metadata
-        self.patients = patients
+    def __init__(self, file, n_pixels, patients, metadata, additional_slices=1, 
+                 batch_size=16, verbose=False):
         self.file = file
         self.n_pixels = n_pixels
+        self.patients = patients
+        self.metadata = metadata
+        self.additional_slices = additional_slices
+        self.batch_size = batch_size
         self.verbose = verbose
 
         self.n_instances = -1
@@ -38,35 +39,17 @@ class DataGenerator(keras.utils.Sequence):
         print("[DATA_GENERATOR] Found %d total instances => %d total batches (batch size of %d)" % (self.n_instances, self.n_instances // self.batch_size, self.batch_size))
         return self.n_instances // self.batch_size
 
-    def get_random_slice(self):
-        pt, idx = self.get_random_patient_and_idx()
-
-        X = pt + "_X_" + str(idx)
-        y = pt + "_y_" + str(idx)
-
-        return X, y
-
-    def get_random_patient_and_idx(self):
-        pt = random.choice(self.patients)
-        idx = random.randrange(0, len(self.metadata[pt]))
-
-        return pt, idx
-
     def __getitem__(self, index):
         if self.verbose:
             start = timer()
         for i in range(self.batch_size):
             X_, y_ = self.get_random_slice()
-
             if i == 0:
-                X = numpy.array(self.file[X_])
-                y = numpy.array(self.file[y_])
+                X = X_
+                y = y_
             else:
-                X = numpy.concatenate([X, numpy.array(self.file[X_])])
-                y = numpy.concatenate([y, numpy.array(self.file[y_])])
-
-        X = X.reshape([-1, self.n_pixels, self.n_pixels, 1])
-        y = y.reshape([-1, self.n_pixels, self.n_pixels, 1])
+                X = numpy.concatenate([X, X_])
+                y = numpy.concatenate([y, y_])
 
         if self.verbose:
             end = timer()
@@ -74,29 +57,50 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
+    def get_random_slice(self):
+        """
+        Produces a random input and label np array consisting of a 
+        random CT slice of interest, as well as n slices above and 
+        n slices below.
+
+        Returns an input array of shape (M,M,2n+1) where M is the 
+        number of pixels in a slice.
+        """
+        n = self.additional_slices
+        M = self.n_pixels
+        f = self.file
+        # Get random patient and index of slice of interest
+        patient = random.choice(self.patients)
+        n_slices = len(self.metadata[patient])
+        slice_idx = random.randrange(0, N_slices)
+        # Label
+        y_stack = [f[patient+"_y_"+str(slice_idx)]]
+        # Stack n input slices below and n above slice of interest
+        X_stack = []
+        for idx in range(slice_idx-n, slice_idx+n+1):
+            if idx < 0 or idx > n_slices-1:
+                # Set slices outside of boundary to zero
+                X_stack.append(np.zeros(M, M))
+            elif idx == slice_idx:
+                X_stack.append(f[patient+"_X_"+str(slice_idx)])
+            else:
+                X_stack.append(f[patient+"_X_"+str(idx)])
+
+        return np.dstack(X_stack), np.dstack(y_stack)
+
 class Train_Helper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-        self.fast           = kwargs.get('fast', False)
+        self.model = kwargs.get('model')
+        self.fast  = kwargs.get('fast', False)
 
-        self.input          = kwargs.get('input')
+        self.input = kwargs.get('input')
         self.input_metadata = kwargs.get('input_metadata')
-        self.tag            = kwargs.get('tag')
-        self.verbose        = kwargs.get('verbose', True)
+        self.tag = kwargs.get('tag')
+        self.verbose = kwargs.get('verbose', True)
 
-        self.train_frac     = kwargs.get('train_frac', 0.7)
-
-        self.unet_config    = kwargs.get('unet_config', {
-                                            "n_filters" : 12,
-                                            "n_layers_conv" : 2,
-                                            "n_layers_unet" : 3,
-                                            "kernel_size" : 4,
-                                            "dropout" : 0.0,
-                                            "batch_norm" : False,
-                                            "learning_rate" : 0.00005,
-                                            "alpha" : 3.,
-                                        })
+        self.train_frac = kwargs.get('train_frac', 0.7)
 
         self.best_loss = 999999
         self.delta = 0.01 # percent by which loss must improve to be considered an improvement
@@ -106,19 +110,19 @@ class Train_Helper():
         self.decay_learning_rate = False
         self.batch_size = 8
         self.max_batch  = 128
-        self.max_epochs = 1
+        self.max_epochs = 10
 
         self.n_assess = 25
         self.n_pixels = -1
 
-        # initialize places to store results
+        # Initialize places to store results
         self.summary = {
-                "input"         : self.input,
-                "train_frac"    : self.train_frac,
-                "config"        : self.unet_config,
-                "predictions"   : [],
-                "metrics"       : { "loss" : [], "dice_loss" : [], "accuracy" : []},
-                "metrics_train" : { "loss" : [], "dice_loss" : [], "accuracy" : []},
+            "input": self.input,
+            "train_frac": self.train_frac,
+            "config": self.unet_config,
+            "predictions": [],
+            "metrics": { "loss" : [], "dice_loss" : [], "accuracy" : []},
+            "metrics_train": { "loss" : [], "dice_loss" : [], "accuracy" : []},
         }
 
     def load_data(self):
@@ -130,8 +134,8 @@ class Train_Helper():
 
         self.calculate_pneumonia_imbalance()
 
-        self.n_train = int(self.train_frac * float(len(self.patients)))
-        self.n_test  = len(self.patients) - self.n_train
+        self.n_train = int(self.train_frac*float(len(self.patients)))
+        self.n_test  = len(self.patients)-self.n_train
 
         patients_shuffle = self.patients
         random.shuffle(patients_shuffle)
@@ -146,12 +150,12 @@ class Train_Helper():
         for pt in self.patients:
             for entry in self.metadata[pt]:
                 pneumonia_pixels += float(entry["n_pneumonia"])
-                all_pixels += float(self.n_pixels ** 2)
+                all_pixels += float(self.n_pixels**2)
 
-        self.pneumonia_fraction = pneumonia_pixels / all_pixels
+        self.pneumonia_fraction = pneumonia_pixels/all_pixels
         print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" % self.pneumonia_fraction)
 
-        #self.unet_config["alpha"] = 1. / self.pneumonia_fraction
+        #self.unet_config["alpha"] = 1.0/self.pneumonia_fraction
 
     def load_weights(self, weights):
         if self.model is not None:
@@ -159,7 +163,6 @@ class Train_Helper():
         self.model.load_weights(weights)
 
     def train(self):
-        self.initialize_model()
         self.train_with_early_stopping()
 
     def generator(self, patients):
@@ -168,8 +171,10 @@ class Train_Helper():
                 X, y = self.load_features([patient])
                 N = len(X)
                 for i in range(N//self.batch_size):
-                    yield X[ (i*self.batch_size) : ((i+1)*self.batch_size)], y[ (i*self.batch_size) : ((i+1)*self.batch_size) ]
-                yield X[(i+1)*self.batch_size:], y[(i+1)*self.batch_size:]
+                    yield X[(i*self.batch_size):((i+1)*self.batch_size)], 
+                          y[(i*self.batch_size):((i+1)*self.batch_size)]
+                yield X[(i+1)*self.batch_size:], 
+                      y[(i+1)*self.batch_size:]
 
     def train_with_early_stopping(self):
         self.weights_file = "weights/" + self.tag + "_weights_{epoch:02d}.hdf5"
@@ -181,22 +186,28 @@ class Train_Helper():
         self.bad_epochs = 0
 
         while train_more:
-            self.train_generator = DataGenerator(file = self.file, metadata = self.metadata,
-                patients = self.patients_train, batch_size = self.batch_size, n_pixels = self.n_pixels)
-            self.validation_generator = DataGenerator(file = self.file, metadata = self.metadata,
-                patients = self.patients_test, batch_size = 128, n_pixels = self.n_pixels)
+            self.train_generator = DataGenerator(file=self.file, 
+                                                 metadata=self.metadata,
+                                                 additional_slices=1,
+                                                 patients=self.patients_train, 
+                                                 batch_size=self.batch_size, 
+                                                 n_pixels=self.n_pixels)
 
+            self.validation_generator = DataGenerator(file=self.file, 
+                                                      metadata=self.metadata,
+                                                      additional_slices=1,
+                                                      patients=self.patients_test, 
+                                                      batch_size=128, 
+                                                      n_pixels=self.n_pixels)
             self.n_epochs += 1
 
             if self.verbose:
                 print("[TRAIN_HELPER] On %d-th epoch of training model" % self.n_epochs)
 
-            results = self.model.fit(
-                       self.train_generator,
-                       callbacks = callbacks_list,
-                       #workers=12, use_multiprocessing=True,
-                       #max_queue_size = 100,
-                       validation_data = self.validation_generator)
+            results = self.model.fit(self.train_generator,
+                                     callbacks=callbacks_list,
+                                     use_multiprocessing=True,
+                                     validation_data=self.validation_generator)
 
             #prediction = self.model.predict(self.validation_generator)
             #self.summary["predictions"].append(prediction)
@@ -218,7 +229,8 @@ class Train_Helper():
                 print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f), incrementing bad epochs by 1." % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) ) 
                 self.bad_epochs += 1
 
-            if (self.increase_batch or self.decay_learning_rate) and self.bad_epochs >= 1: # increase batch size (decay learning rate as well?)
+            if (self.increase_batch or self.decay_learning_rate) and self.bad_epochs >= 1: 
+                # Increase batch size (decay learning rate as well?)
                 if self.batch_size * 4 <= self.max_batch:
                     print("[TRAIN_HELPER] Increasing batch size from %d -> %d, resetting bad epochs to 0, and continuing for another epoch." % (self.batch_size, self.batch_size * 4))
                     self.batch_size *= 4
@@ -241,7 +253,10 @@ class Train_Helper():
         for pt in self.patients:
             self.data_manager[pt] = []
             for entry in self.metadata[pt]:
-                self.data_manager[pt].append( { "keys" : [entry["X"], entry["y"]], "n_pneumonia" : float(entry["n_pneumonia"]) } )
+                self.data_manager[pt].append({
+                    "keys": [entry["X"], entry["y"]], 
+                    "n_pneumonia": float(entry["n_pneumonia"])
+                })
 
         if self.n_pixels == -1:
             X = numpy.array(self.file[self.patients[0] + "_X_0"])
@@ -272,9 +287,6 @@ class Train_Helper():
 
         return X, y
 
-    def initialize_model(self):
-        self.model = models.unet(self.unet_config)
-
     def make_roc_curve(self):
         self.tprs = []
         self.fprs = []
@@ -302,16 +314,19 @@ class Train_Helper():
             self.tprs.append(tpr)
             self.aucs.append(auc)
 
-        tpr_mean = numpy.mean(self.tprs, axis = 0)
-        tpr_std  = numpy.std( self.tprs, axis = 0)
-        fpr_mean = numpy.mean(self.fprs, axis = 0)
-        fpr_std  = numpy.std( self.fprs, axis = 0)
+        tpr_mean = numpy.mean(self.tprs, axis=0)
+        tpr_std  = numpy.std( self.tprs, axis=0)
+        fpr_mean = numpy.mean(self.fprs, axis=0)
+        fpr_std  = numpy.std( self.fprs, axis=0)
         auc = numpy.mean(self.aucs)
         auc_std = numpy.std(self.aucs)
         
         utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
 
-    def assess(self): # make plots of original | truth | pred \\ original + truth | original + pred | original + (pred - truth)
+    def assess(self): 
+        """
+        Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
+        """
         X, y = self.validation_generator.__getitem__(0)
         preds = self.model.predict(X, batch_size = 16)
         idx = 0
