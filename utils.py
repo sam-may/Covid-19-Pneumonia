@@ -17,7 +17,7 @@ import cv2
 import pydicom
 import nibabel
 
-def load_dcms(dcm_files, n=0):
+def load_dcms(dcm_files):
     """
     Load DICOM (DCM) files and retrieve CT slices. Each DCM file
     contains just one CT slice from a given CT scan.
@@ -44,9 +44,9 @@ def load_dcms(dcm_files, n=0):
     ct_slices = list(numpy.array(ct_slices)[idx_sorted])
     ct_slices.reverse() # do I need this?
 
-    return get_multidim_slices(ct_slices, n)
+    return ct_slices
 
-def load_nii(nii_file, n=0):
+def load_nii(nii_file):
     """
     Decompress *.nii.gz files and retrieve CT slices. Each nii file contains
     every CT slice from a single CT scan.
@@ -61,45 +61,21 @@ def load_nii(nii_file, n=0):
     file_data = nibabel.load(nii_file).get_fdata()
     ct_slices = numpy.flip(numpy.rot90(file_data, -1), 1).T # sorted head-to-toe
 
-    return get_multidim_slices(ct_slices, n)
+    return ct_slices
 
-def get_multidim_slices(ct_slices, n):
-    """
-    Returns one multi-channel image for each slice, where channels 
-    in [0,n) give the n slices below the slice of interest and
-    channels in (n,2n+1] give the n slices above.
-    """
-    multidim_ct_slices = [] # output array
-
-    n_slices = len(ct_slices)
-    for n_slice, ct_slice in enumerate(ct_slices):
-        # Collect n slices above and below current slice
-        ct_slice_stack = []
-        if n_slice > 0:
-            lowest_slice = max(0, n_slice-n)
-            ct_slice_stack += ct_slices[lowest_slice:n_slice] 
-        if n_slice < n_slices:
-            highest_slice = min(n_slices, n_slice+n)
-            ct_slice_stack += ct_slices[n_slice:highest_slice+1] # [n:m] -> [n,m)
-        # Stack the slices as one multi-channel image
-        stacked_ct_slices = np.dstack(ct_slice_stack)
-
-        multidim_ct_slices.append(stacked_ct_slices)
-
-    return numpy.array(multidim_ct_slices).astype(numpy.float32)
-
-def power_of_two(n):
+def is_power_of_two(n):
     """Returns True if n is a power of two"""
     return math.log2(n).is_integer()
 
-def downsample_images(images, downsample, round = False):
-    nPixels = images.shape[-1]
+def downsample_images(images, downsample, round=False):
+    n_pixels = images.shape[-1]
 
-    if (not power_of_two(nPixels) or not power_of_two(downsample) or not (nPixels / downsample).is_integer()):
-        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (nPixels, downsample))
+    if (not is_power_of_two(n_pixels) or not is_power_of_two(downsample) 
+        or not (n_pixels/downsample).is_integer()):
+        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (n_pixels, downsample))
         sys.exit(1)
 
-    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (nPixels, downsample))
+    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (n_pixels, downsample))
 
     downsampled_images = []
     for image in images:
@@ -122,7 +98,8 @@ def nonzero_entries(array):
 
     return numpy.array(nonzero)
 
-def scale_image(image): # scales image from 0 to 1
+def scale_image(image):
+    """Normalize image pixel values to range from 0 to 1"""
     image = numpy.array(image)
 
     min_val = numpy.amin(image)
@@ -132,17 +109,16 @@ def scale_image(image): # scales image from 0 to 1
     image *= 1./max_val
     return image
 
-fs = 6
-def plot_image_and_truth(image, truth, name):
+def plot_image_and_truth(image, truth, name, fs=6):
     fig = plt.figure()
     ax = fig.add_subplot(131)
     image_scaled = scale_image(image)
-    plt.imshow(image_scaled, cmap = 'gray')
-    plt.title("Original CT Scan", fontsize = fs)
+    plt.imshow(image_scaled, cmap='gray')
+    plt.title("Original CT Scan", fontsize=fs)
 
     ax = fig.add_subplot(132)
-    plt.imshow(truth, cmap = 'gray')
-    plt.title("Radiologist Ground Truth", fontsize = fs)
+    plt.imshow(truth, cmap='gray')
+    plt.title("Radiologist Ground Truth", fontsize=fs)
 
     ax = fig.add_subplot(133)
     blend = image_scaled
@@ -152,8 +128,8 @@ def plot_image_and_truth(image, truth, name):
             if truth[i][j] == 1:
                 blend[i][j] = 1
 
-    plt.imshow(blend, cmap = 'gray')
-    plt.title("Original & Truth", fontsize = fs)
+    plt.imshow(blend, cmap='gray')
+    plt.title("Original & Truth", fontsize=fs)
     plt.savefig(name)
     plt.close(fig)
 
@@ -165,7 +141,7 @@ def transparent_cmap(cmap, N=255):
     mycmap._lut[:,-1] = numpy.linspace(0, 0.8, N+4)
     return mycmap
 
-def make_heatmap(pred, divergent_colormap = False):
+def make_heatmap(pred, divergent_colormap=False):
     w, h = pred.shape
     x, y = numpy.mgrid[0:w, 0:h]
 
@@ -178,56 +154,56 @@ def make_heatmap(pred, divergent_colormap = False):
 
     return x, y, cmap, levels
 
-def plot_image_truth_and_pred(image, truth, pred, name):
+def plot_image_truth_and_pred(image, truth, pred, name, fs=6):
     fig = plt.figure()
     ax = fig.add_subplot(231)
 
     image_scaled = scale_image(image)
-    plt.imshow(image_scaled, cmap = 'gray')
-    plt.title("Original", fontsize = fs)
+    plt.imshow(image_scaled, cmap='gray')
+    plt.title("Original", fontsize=fs)
     plt.axis('off')
 
     ax = fig.add_subplot(232)
-    plt.imshow(truth, cmap = 'gray')
-    plt.title("Ground Truth", fontsize = fs)
+    plt.imshow(truth, cmap='gray')
+    plt.title("Ground Truth", fontsize=fs)
     plt.axis('off')
 
     ax = fig.add_subplot(233)
-    plt.imshow(pred, cmap = 'gray')
-    plt.title("U-Net Prediction", fontsize = fs)
+    plt.imshow(pred, cmap='gray')
+    plt.title("U-Net Prediction", fontsize=fs)
     plt.axis('off')
 
     ax = fig.add_subplot(234)
-    plt.imshow(image_scaled, cmap = 'gray')
+    plt.imshow(image_scaled, cmap='gray')
     x, y, cmap, levels = make_heatmap(truth)
-    heatmap = plt.contourf(x, y, truth.transpose(), cmap = cmap, levels = levels)
-    plt.title('Original + Truth', fontsize = fs)
+    heatmap = plt.contourf(x, y, truth.transpose(), cmap=cmap, levels=levels)
+    plt.title('Original + Truth', fontsize=fs)
     plt.axis('off')
 
     ax = fig.add_subplot(235)
-    plt.imshow(image_scaled, cmap = 'gray')
+    plt.imshow(image_scaled, cmap='gray')
     x, y, cmap, levels = make_heatmap(pred)
-    heatmap = plt.contourf(x, y, pred.transpose(), cmap = cmap, levels = levels)
-    plt.title('Original + Prediction', fontsize = fs)
+    heatmap = plt.contourf(x, y, pred.transpose(), cmap=cmap, levels=levels)
+    plt.title('Original + Prediction', fontsize=fs)
     plt.axis('off')
 
     ax = fig.add_subplot(236)
-    plt.imshow(image_scaled, cmap = 'gray')
+    plt.imshow(image_scaled, cmap='gray')
     x, y, cmap, levels = make_heatmap(truth - pred, True)
-    corrmap = plt.contourf(x, y, (truth - pred).transpose(), cmap = cmap, levels = levels)
-    plt.title('Truth - Prediction', fontsize = fs)
+    corrmap = plt.contourf(x, y, (truth - pred).transpose(), cmap=cmap, levels=levels)
+    plt.title('Truth - Prediction', fontsize=fs)
     plt.axis('off')
 
 
     fig.subplots_adjust(right=0.8)
     cbar_ax = fig.add_axes([0.85, 0.55, 0.05, 0.35])
     cbar = fig.colorbar(heatmap, cax=cbar_ax)
-    cbar.ax.set_ylabel('Pneumonia Score', rotation=270, labelpad=15, fontsize = fs) 
+    cbar.ax.set_ylabel('Pneumonia Score', rotation=270, labelpad=15, fontsize=fs) 
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
 
     cbar_ax = fig.add_axes([0.85, 0.1, 0.05, 0.35])
     cbar = fig.colorbar(corrmap, cax=cbar_ax)
-    cbar.ax.set_ylabel('Truth - Prediction', rotation=270, labelpad=15, fontsize = fs)
+    cbar.ax.set_ylabel('Truth - Prediction', rotation=270, labelpad=15, fontsize=fs)
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
 
     #plt.tight_layout()
@@ -242,23 +218,23 @@ def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
     
     ax1.plot(fpr_mean, 
              tpr_mean,
-             color = 'blue', 
-             label = "U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std))
+             color='blue', 
+             label="U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std))
     ax1.fill_between(fpr_mean,
                      tpr_mean - (tpr_std/2.),
                      tpr_mean + (tpr_std/2.),
-                     color = 'blue',
-                     alpha = 0.25, label = r'$\pm 1\sigma$')
+                     color='blue',
+                     alpha=0.25, label=r'$\pm 1\sigma$')
     
     plt.xlim([-0.05,1.05])
     plt.ylim([-0.05,1.05])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.legend(loc = "lower right")
+    plt.legend(loc="lower right")
     plt.savefig("plots/roc_comparison_%s.pdf" % tag)
     plt.close(fig)
    
-def calc_auc(y, pred, interp = 100):
+def calc_auc(y, pred, interp=100):
     fpr, tpr, thresh = roc_curve(y, pred)
 
     fpr_interp = numpy.linspace(0, 1, interp)
