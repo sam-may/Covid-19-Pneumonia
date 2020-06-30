@@ -45,23 +45,22 @@ args = parser.parse_args()
 
 # Initialize training functions
 helper = train_helper.Train_Helper(
-    model=model,
     n_extra_slices=args.n_extra_slices,
     input=args.input,
     input_metadata=args.input_metadata,
     tag=args.tag,
     train_frac=0.7,
-    fast=False
+    fast=False,
     max_epochs=args.max_epochs
 )
 
 # Initialize model
 unet_config = {
-    "input_shape": train_helper.input_shape,
+    "input_shape": helper.input_shape,
     "n_filters": 12,
     "n_layers_conv": 2,
     "n_layers_unet": 3,
-    "kernel_size": (4,4,train_helper.input_shape[2]),
+    "kernel_size": (4, 4),
     "dropout": 0.0,
     "batch_norm": False,
     "learning_rate": 0.00005,

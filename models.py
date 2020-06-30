@@ -57,10 +57,11 @@ def cnn(n_pixels, config):
 
 def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool=2, 
              dropout=0.25, batch_norm=True, activation='elu', conv_dict={}):
+    # Input
     conv = input_img
-
+    # Convolution layers
     for i in range(n_layers):
-        conv = keras.layers.Conv3D(
+        conv = keras.layers.Conv2D(
             n_filters, 
             kernel_size=kernel_size,
             activation=activation,
@@ -78,13 +79,13 @@ def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool=2,
 
         if batch_norm:
             conv = keras.layers.BatchNormalization()(conv)
-
+    # Store conv layer for lateral info transfer
     if conv_dict: 
         # Store the conv before applying max pooling, so it can be 
         # used later to help give higher resolution information in 
         # the up_convs
         conv_dict['std_conv_%s' % name] = conv
-
+    # Max pooling layer (down-sampling)
     if max_pool >= 2:
         conv = keras.layers.MaxPooling2D(
             pool_size=(max_pool,max_pool), 
@@ -99,7 +100,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image=None,
     conv = input_img
 
     for i in range(n_layers):
-        conv = keras.layers.Conv3DTranspose(
+        conv = keras.layers.Conv2DTranspose(
             n_filters, 
             kernel_size,
             strides=2,
