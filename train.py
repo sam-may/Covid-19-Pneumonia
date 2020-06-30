@@ -2,11 +2,9 @@
 
 import os, sys
 import argparse
-
 import numpy
 import glob
 import h5py
-
 import utils
 import models
 import train_helper
@@ -44,7 +42,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Initialize training functions
-helper = train_helper.Train_Helper(
+helper = train_helper.TrainHelper(
     n_extra_slices=args.n_extra_slices,
     input=args.input,
     input_metadata=args.input_metadata,

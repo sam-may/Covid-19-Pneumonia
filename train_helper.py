@@ -1,15 +1,12 @@
 import os, sys
-
 import numpy
 import h5py
 import random
 import glob
 import json
 from timeit import default_timer as timer
-
 import metrics
 import utils
-
 import tensorflow
 import tensorflow.keras as keras
 
@@ -86,7 +83,7 @@ class DataGenerator(keras.utils.Sequence):
 
         return numpy.dstack(X_stack), numpy.dstack(y_stack)
 
-class Train_Helper():
+class TrainHelper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         # General
@@ -329,10 +326,9 @@ class Train_Helper():
         slice_index = self.n_extra_slices # index of slice of interest
         for i in range(n_plots):
             input_data, truth = self.validation_generator.get_random_slice()
-            input_data = numpy.array([input_data])
-            preds = self.model.predict(input_data, batch_size=16)
+            pred = self.model.predict(numpy.array([input_data]), batch_size=16)
             # Extract slice of interest from input data
-            orig = input_data[0][slice_index]
+            orig = input_data[:,:,slice_index]
             # Reshape into plottable images
             orig = orig.reshape([self.n_pixels, self.n_pixels])
             truth = truth.reshape([self.n_pixels, self.n_pixels])
