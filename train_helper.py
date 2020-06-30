@@ -27,7 +27,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __len__(self):
         if self.n_instances > 0:
-            return self.n_instances // self.batch_size
+            return self.n_instances//self.batch_size
 
         print("[DATA_GENERATOR] Counting total number of instances.")
 
@@ -35,8 +35,9 @@ class DataGenerator(keras.utils.Sequence):
         for patient in self.patients:
             self.n_instances += len(self.metadata[patient])
 
-        print("[DATA_GENERATOR] Found %d total instances => %d total batches (batch size of %d)" % (self.n_instances, self.n_instances // self.batch_size, self.batch_size))
-        return self.n_instances // self.batch_size
+        print("[DATA_GENERATOR] Found %d instances => %d batches (batch size = %d)" 
+              % (self.n_instances, self.n_instances//self.batch_size, self.batch_size))
+        return self.n_instances//self.batch_size
 
     def __getitem__(self, index):
         if self.verbose:
@@ -171,13 +172,14 @@ class Train_Helper():
         pneumonia_pixels = 0
         all_pixels = 0
         
-        for pt in self.patients:
-            for entry in self.metadata[pt]:
+        for patient in self.patients:
+            for entry in self.metadata[patient]:
                 pneumonia_pixels += float(entry["n_pneumonia"])
                 all_pixels += float(self.n_pixels**2)
 
         self.pneumonia_fraction = pneumonia_pixels/all_pixels
-        print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" % self.pneumonia_fraction)
+        print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
+              % self.pneumonia_fraction)
 
         #self.unet_config["alpha"] = 1.0/self.pneumonia_fraction
 
@@ -235,26 +237,32 @@ class Train_Helper():
         self.n_epochs = 0
         self.bad_epochs = 0
         while train_more:
-            self.train_generator = DataGenerator(file=self.file, 
-                                                 metadata=self.metadata,
-                                                 input_shape=self.input_shape,
-                                                 patients=self.patients_train, 
-                                                 batch_size=self.batch_size)
-
-            self.validation_generator = DataGenerator(file=self.file, 
-                                                      metadata=self.metadata,
-                                                      input_shape=self.input_shape,
-                                                      patients=self.patients_test, 
-                                                      batch_size=128)
+            self.train_generator = DataGenerator(
+                file=self.file, 
+                metadata=self.metadata,
+                input_shape=self.input_shape,
+                patients=self.patients_train, 
+                batch_size=self.batch_size
+            )
+            self.validation_generator = DataGenerator(
+                file=self.file, 
+                metadata=self.metadata,
+                input_shape=self.input_shape,
+                patients=self.patients_test, 
+                batch_size=128
+            )
             self.n_epochs += 1
 
             if self.verbose:
-                print("[TRAIN_HELPER] On %d-th epoch of training model" % self.n_epochs)
+                print("[TRAIN_HELPER] On %d-th epoch of training model" 
+                      % self.n_epochs)
 
-            results = self.model.fit(self.train_generator,
-                                     callbacks=callbacks_list,
-                                     use_multiprocessing=True,
-                                     validation_data=self.validation_generator)
+            results = self.model.fit(
+                self.train_generator,
+                callbacks=callbacks_list,
+                use_multiprocessing=True,
+                validation_data=self.validation_generator
+            )
 
             #prediction = self.model.predict(self.validation_generator)
             #self.summary["predictions"].append(prediction)
@@ -267,28 +275,43 @@ class Train_Helper():
                 self.summary["metrics"][metric].append(str(results.history['val_' + metric][0]))
                 self.summary["metrics_train"][metric].append(str(results.history[metric][0]))
 
+            percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
             if (val_loss * (1. + self.delta)) < self.best_loss:
-                print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f), continuing for another epoch" % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) )
+                print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f)" 
+                      % (percent_change, self.best_loss, val_loss))
+                print("[TRAIN_HELPER] --> continuing for another epoch")
                 self.best_loss = val_loss
                 self.bad_epochs = 0
 
             else:
-                print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f), incrementing bad epochs by 1." % ( ((self.best_loss - val_loss) / val_loss) * 100., self.best_loss, val_loss) ) 
+                print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f)" 
+                      % (percent_change, self.best_loss, val_loss)) 
+                print("[TRAIN_HELPER] --> incrementing bad epochs by 1")
                 self.bad_epochs += 1
 
-            if (self.increase_batch or self.decay_learning_rate) and self.bad_epochs >= 1: 
+            if (self.increase_batch or self.decay_learning_rate) 
+                and self.bad_epochs >= 1: 
                 # Increase batch size (decay learning rate as well?)
                 if self.batch_size * 4 <= self.max_batch:
-                    print("[TRAIN_HELPER] Increasing batch size from %d -> %d, resetting bad epochs to 0, and continuing for another epoch." % (self.batch_size, self.batch_size * 4))
+                    print("[TRAIN_HELPER] --> Increasing batch size from %d -> %d" 
+                          % (self.batch_size, self.batch_size*4))
+                    print("[TRAIN_HELPER] --> resetting bad epochs to 0")
+                    print("[TRAIN_HELPER] --> continuing for another epoch")
                     self.batch_size *= 4
                     self.bad_epochs = 0
 
             if self.bad_epochs >= self.early_stopping_rounds:
-                print("[TRAIN_HELPER] Number of early stopping rounds (%d) without improvement in loss of at least %.2f percent exceeded. Stopping training after %d epochs." % (self.early_stopping_rounds, self.delta*100., self.n_epochs))
+                print("[TRAIN_HELPER] Number of early stopping rounds (%d) without\
+                      improvement in loss of at least %.2f percent exceeded" 
+                      % (self.early_stopping_rounds, self.delta*100.))
+                print("[TRAIN_HELPER] --> stopping training after %d epochs" 
+                      % (self.n_epochs))
                 train_more = False
         
             if self.max_epochs > 0 and self.n_epochs >= self.max_epochs:
-                print("[TRAIN_HELPER] Maximum number of training epochs (%d) reached. Stopping training." % (self.max_epochs))
+                print("[TRAIN_HELPER] Maximum number of training epochs (%d) reached" 
+                      % (self.max_epochs))
+                print("[TRAIN_HELPER] --> stopped training")
                 train_more = False
 
         with open("results_%s.json" % self.tag, "w") as f_out:
@@ -305,12 +328,10 @@ class Train_Helper():
             for j in range(3):
                 X, y_ = self.validation_generator.__getitem__((i*3)+j)
                 pred_ = self.model.predict(X)
-
+                y.append(y_)
                 if j == 0:
-                    y = y_
                     pred = pred_
                 else:
-                    y = numpy.concatenate([y, y_])
                     pred = numpy.concatenate([pred, pred_])
 
             #X, y = self.validation_generator.__getitem__(i)
@@ -322,9 +343,9 @@ class Train_Helper():
             self.aucs.append(auc)
 
         tpr_mean = numpy.mean(self.tprs, axis=0)
-        tpr_std  = numpy.std( self.tprs, axis=0)
+        tpr_std = numpy.std(self.tprs, axis=0)
         fpr_mean = numpy.mean(self.fprs, axis=0)
-        fpr_std  = numpy.std( self.fprs, axis=0)
+        fpr_std = numpy.std(self.fprs, axis=0)
         auc = numpy.mean(self.aucs)
         auc_std = numpy.std(self.aucs)
         
