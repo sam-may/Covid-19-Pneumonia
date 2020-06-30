@@ -53,7 +53,7 @@ class DataGenerator(keras.utils.Sequence):
             end = timer()
             print("[DATA_GENERATOR] Took %.6f seconds to load batch" % (end - start))
 
-        return X, y
+        return numpy.array(X), numpy.array(y)
 
     def get_random_slice(self):
         """
@@ -65,12 +65,12 @@ class DataGenerator(keras.utils.Sequence):
         number of pixels in a slice.
         """
         M, M_, n_ = self.input_shape # assuming (M,M,2*n+1)
-        n = 2*n_-1
+        n = int((n_-1.0)/2.0)
         f = self.file
         # Get random patient and index of slice of interest
         patient = random.choice(self.patients)
         n_slices = len(self.metadata[patient])
-        slice_idx = random.randrange(0, N_slices)
+        slice_idx = random.randrange(0, n_slices)
         # Label
         y_stack = [f[patient+"_y_"+str(slice_idx)]]
         # Stack n input slices below and n above slice of interest
@@ -78,13 +78,13 @@ class DataGenerator(keras.utils.Sequence):
         for idx in range(slice_idx-n, slice_idx+n+1):
             if idx < 0 or idx > n_slices-1:
                 # Set slices outside of boundary to zero
-                X_stack.append(np.zeros(M, M))
+                X_stack.append(numpy.zeros((M, M)))
             elif idx == slice_idx:
                 X_stack.append(f[patient+"_X_"+str(slice_idx)])
             else:
                 X_stack.append(f[patient+"_X_"+str(idx)])
 
-        return np.dstack(X_stack), np.dstack(y_stack)
+        return numpy.dstack(X_stack), numpy.dstack(y_stack)
 
 class Train_Helper():
     def __init__(self, **kwargs):
@@ -93,14 +93,6 @@ class Train_Helper():
         self.verbose = kwargs.get('verbose', True)
         self.fast  = kwargs.get('fast', False)
         self.tag = kwargs.get('tag')
-        # Data
-        self.input = kwargs.get('input')
-        self.input_metadata = kwargs.get('input_metadata')
-        self.input_shape = (-1, -1, -1) # i.e. (M,M,2n+1)
-        self.data_manager = {}
-        self.load_data()
-        self.n_extra_slices = kwargs.get('n_extra_slices', 0) # i.e. n
-        self.n_pixels = self.input_shape[0] # i.e. M
         # Training hyperparameters
         self.train_frac = kwargs.get('train_frac', 0.7)
         self.best_loss = 999999
@@ -111,11 +103,19 @@ class Train_Helper():
         self.batch_size = 8
         self.max_batch = 128
         self.max_epochs = kwargs.get('max_epochs', 1)
+        # Data
+        self.input = kwargs.get('input')
+        self.input_metadata = kwargs.get('input_metadata')
+        self.n_extra_slices = kwargs.get('n_extra_slices', 0) # i.e. n
+        self.input_shape = (-1, -1, -1) # i.e. (M,M,2n+1)
+        self.data_manager = {}
+        self.n_pixels = -1 # i.e. M
+        self.load_data() # sets the above three variables
         # Initialize results object
         self.summary = {
             "input": self.input,
             "train_frac": self.train_frac,
-            "config": self.unet_config,
+            "config": {},
             "predictions": [],
             "metrics": {
                 "loss": [], 
@@ -129,7 +129,6 @@ class Train_Helper():
             }
         }
 
-
     def load_data(self):
         """
         Load input hdf5 file and set patients array, get pneumonia 
@@ -141,6 +140,12 @@ class Train_Helper():
             self.metadata = json.load(f_in)
 
         self.get_patients()
+        # Derive/store input shape
+        X_ = numpy.array(self.file[self.patients[0]+"_X_0"])
+        self.n_pixels = X_.shape[0]
+        self.input_shape = (X_.shape[0], X_.shape[1], 
+                            2*self.n_extra_slices+1)
+
         self.calculate_pneumonia_imbalance()
         # Calculate number of training/testing slices
         self.n_train = int(self.train_frac*float(len(self.patients)))
@@ -151,11 +156,6 @@ class Train_Helper():
         # Distribute training and testing data
         self.patients_train = patients_shuffle[:self.n_train]
         self.patients_test  = patients_shuffle[self.n_train:]
-        # Derive/store input shape
-        X_ = numpy.array(self.file[self.patients[0] + "_X_0"])
-        self.n_pixels = X_.shape[1]
-        self.input_shape = (X_.shape[1], X_.shape[2], 
-                            2*self.n_extra_slices+1)
 
     def get_patients(self):
         self.patients = [key for key in self.metadata.keys() 
@@ -167,6 +167,7 @@ class Train_Helper():
                     "keys": [entry["X"], entry["y"]], 
                     "n_pneumonia": float(entry["n_pneumonia"])
                 })
+        return
 
     def calculate_pneumonia_imbalance(self):
         pneumonia_pixels = 0
@@ -180,52 +181,19 @@ class Train_Helper():
         self.pneumonia_fraction = pneumonia_pixels/all_pixels
         print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
               % self.pneumonia_fraction)
-
-        #self.unet_config["alpha"] = 1.0/self.pneumonia_fraction
+        return
 
     def load_weights(self, weights):
         if self.model is not None:
             self.initialize_model()
         self.model.load_weights(weights)
+        return
 
-    def train(self, model):
+    def train(self, model, model_config=None):
+        self.summary["config"] = model_config
         self.model = model
         self.train_with_early_stopping()
-
-    # def load_from_file(self, patient):
-    #     f_in = h5py.File(self.file_dict[patient]["file"], "r")
-    #     X = numpy.array(f_in[self.file_dict[patient]["X"]])
-    #     y = numpy.array(f_in[self.file_dict[patient]["y"]])
-
-    #     return X, y
-
-    # def generator(self, patients):
-    #     while True:
-    #         for patient in patients:
-    #             X, y = self.load_features([patient])
-    #             N = len(X)
-    #             for i in range(N//self.batch_size):
-    #                 yield X[(i*self.batch_size):((i+1)*self.batch_size)], 
-    #                       y[(i*self.batch_size):((i+1)*self.batch_size)]
-    #             yield X[(i+1)*self.batch_size:], 
-    #                   y[(i+1)*self.batch_size:]
-
-    # def load_features(self, patients):
-    #     X = []
-    #     y = []
-
-    #     for patient in patients:
-    #         if len(X) == 0:
-    #             X, y = self.load_from_file(patient)
-    #         else:
-    #             X_, y_ = self.load_from_file(patient)
-    #             X = numpy.concatenate([X, X_])
-    #             y = numpy.concatenate([y, y_])
-
-    #     X = X.reshape([-1, self.n_pixels, self.n_pixels, 1])
-    #     y = y.reshape([-1, self.n_pixels, self.n_pixels, 1])
-
-    #     return X, y
+        return
 
     def train_with_early_stopping(self):
         # Save weights to file after ever epoch
@@ -254,7 +222,7 @@ class Train_Helper():
             self.n_epochs += 1
 
             if self.verbose:
-                print("[TRAIN_HELPER] On %d-th epoch of training model" 
+                print("[TRAIN_HELPER] On epoch %d of training model" 
                       % self.n_epochs)
 
             results = self.model.fit(
@@ -289,8 +257,8 @@ class Train_Helper():
                 print("[TRAIN_HELPER] --> incrementing bad epochs by 1")
                 self.bad_epochs += 1
 
-            if (self.increase_batch or self.decay_learning_rate) 
-                and self.bad_epochs >= 1: 
+            if ((self.increase_batch or self.decay_learning_rate) 
+                and self.bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
                 if self.batch_size * 4 <= self.max_batch:
                     print("[TRAIN_HELPER] --> Increasing batch size from %d -> %d" 
@@ -317,14 +285,16 @@ class Train_Helper():
         with open("results_%s.json" % self.tag, "w") as f_out:
             json.dump(self.summary, f_out, indent = 4, sort_keys = True) 
 
+        return
+
     def make_roc_curve(self):
         self.tprs = []
         self.fprs = []
         self.aucs = []
 
         for i in range(10):
-            y = []
             pred = []
+            y = []
             for j in range(3):
                 X, y_ = self.validation_generator.__getitem__((i*3)+j)
                 pred_ = self.model.predict(X)
@@ -334,8 +304,8 @@ class Train_Helper():
                 else:
                     pred = numpy.concatenate([pred, pred_])
 
-            #X, y = self.validation_generator.__getitem__(i)
-            #pred = self.model.predict(X)
+            pred = numpy.array(pred)
+            y = numpy.array(y)
 
             fpr, tpr, auc = utils.calc_auc(y.flatten(), pred.flatten())
             self.fprs.append(fpr)
@@ -350,18 +320,24 @@ class Train_Helper():
         auc_std = numpy.std(self.aucs)
         
         utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
+        return
 
-    def assess(self): 
+    def assess(self, n_plots=5): 
         """
         Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
         """
-        X, y = self.validation_generator.__getitem__(0)
-        preds = self.model.predict(X, batch_size = 16)
-        idx = 0
-        for image, truth, pred in zip(X, y, preds):
-            image = image.reshape([self.n_pixels, self.n_pixels])
+        slice_index = self.n_extra_slices # index of slice of interest
+        for i in range(n_plots):
+            input_data, truth = self.validation_generator.get_random_slice()
+            input_data = numpy.array([input_data])
+            preds = self.model.predict(input_data, batch_size=16)
+            # Extract slice of interest from input data
+            orig = input_data[0][slice_index]
+            # Reshape into plottable images
+            orig = orig.reshape([self.n_pixels, self.n_pixels])
             truth = truth.reshape([self.n_pixels, self.n_pixels])
-            pred  = pred.reshape([self.n_pixels, self.n_pixels])       
+            pred = pred.reshape([self.n_pixels, self.n_pixels])       
+            # Plot
+            utils.plot_image_truth_and_pred(orig, truth, pred, "comp_%d" % i)
 
-            utils.plot_image_truth_and_pred(image, truth, pred, "comp_%d" % idx)
-            idx += 1
+        return
