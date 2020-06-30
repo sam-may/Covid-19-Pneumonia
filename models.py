@@ -60,7 +60,7 @@ def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool=2,
     conv = input_img
 
     for i in range(n_layers):
-        conv = keras.layers.Conv2D(
+        conv = keras.layers.Conv3D(
             n_filters, 
             kernel_size=kernel_size,
             activation=activation,
@@ -99,7 +99,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image=None,
     conv = input_img
 
     for i in range(n_layers):
-        conv = keras.layers.Conv2DTranspose(
+        conv = keras.layers.Conv3DTranspose(
             n_filters, 
             kernel_size,
             strides=2,

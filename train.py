@@ -61,7 +61,7 @@ unet_config = {
     "n_filters": 12,
     "n_layers_conv": 2,
     "n_layers_unet": 3,
-    "kernel_size": 4,
+    "kernel_size": (4,4,train_helper.input_shape[2]),
     "dropout": 0.0,
     "batch_norm": False,
     "learning_rate": 0.00005,
