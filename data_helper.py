@@ -14,8 +14,13 @@ class Data_Helper():
         self.kwargs = kwargs
 
         self.input_dir_wuhan  = kwargs.get('input_dir_wuhan')
-        self.input_dir_russia  = kwargs.get('input_dir_russia')
-        self.input_dir = self.input_dir_wuhan.replace("wuhan", "")
+        self.input_dir_russia = kwargs.get('input_dir_russia')
+        if self.input_dir_wuhan:
+            self.input_dir = self.input_dir_wuhan.replace("wuhan", "")
+        elif self.input_dir_russia:
+            self.input_dir = self.input_dir_russia.replace("russia", "")
+        else:
+           raise ValueError('No input directories supplied.')
 
         self.tag        = kwargs.get('tag')
         
@@ -74,23 +79,26 @@ class Data_Helper():
 
     def find_patients(self):
         self.patients = {}
-        for dir in glob.glob(self.input_dir_wuhan + "/patient*/"):
-            patient = dir.split("/")[-2]
-            self.patients[patient] = {
-                    "inputs" : glob.glob(dir + "*/"),
-                    "X" : [],
-                    "y" : []
-            }
 
-        for nii in glob.glob(self.input_dir_russia + "/study_*.nii.gz"):
-            id = int(nii.split("/")[-1].replace("study_", "").replace(".nii.gz", ""))
-            patient = "russia_patient_%d" % id
-            self.patients[patient] = {
-                    "features" : nii, 
-                    "label"    : self.input_dir_russia + "/masks/study_0%d_mask.nii.gz" % id,
-                    "X" : [],
-                    "y" : []
-            }
+        if self.input_dir_wuhan:
+            for dir in glob.glob(self.input_dir_wuhan + "/patient*/"):
+                patient = dir.split("/")[-2]
+                self.patients[patient] = {
+                        "inputs" : glob.glob(dir + "*/"),
+                        "X" : [],
+                        "y" : []
+                }
+
+        if self.input_dir_russia:
+            for nii in glob.glob(self.input_dir_russia + "/study_*.nii.gz"):
+                id = int(nii.split("/")[-1].replace("study_", "").replace(".nii.gz", ""))
+                patient = "russia_patient_%d" % id
+                self.patients[patient] = {
+                        "features" : nii, 
+                        "label"    : self.input_dir_russia + "/masks/study_0%d_mask.nii.gz" % id,
+                        "X" : [],
+                        "y" : []
+                }
 
     def load_data(self, patient):
         if "russia" in patient:
