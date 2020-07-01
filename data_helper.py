@@ -13,7 +13,7 @@ class DataHelper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-        self.input_dir_wuhan  = kwargs.get('input_dir_wuhan')
+        self.input_dir_wuhan = kwargs.get('input_dir_wuhan')
         self.input_dir_russia = kwargs.get('input_dir_russia')
         if self.input_dir_wuhan:
             self.input_dir = self.input_dir_wuhan.replace("wuhan", "")
@@ -22,12 +22,11 @@ class DataHelper():
         else:
            raise ValueError('No input directories supplied.')
 
-        self.tag        = kwargs.get('tag')
-        
+        self.tag = kwargs.get('tag')
         self.downsample = kwargs.get('downsample')
         # Automatically downsample all images to this size to begin with (some 
         # inputs may be bigger, some will be this size)
-        self.min_size   = kwargs.get('min_size', 512) 
+        self.min_size = kwargs.get('min_size', 512) 
 
         self.preprocess_method = kwargs.get('preprocess_method', 'z_score')
 
@@ -64,6 +63,7 @@ class DataHelper():
             }
 
     def prep(self):
+        """Convert to hdf5 and write to disk"""
         self.find_patients()
 
         ctr = 0

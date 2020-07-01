@@ -22,12 +22,11 @@ import data_helper
 input_dir_wuhan = "/public/smay/covid_ct_data/wuhan/"
 input_dir_russia = "/public/smay/covid_ct_data/russia/"
 
-helper = data_helper.Data_Helper(
-            input_dir_wuhan   = input_dir_wuhan,
-            input_dir_russia  = input_dir_russia,
-
-            tag         = args.tag,
-            downsample  = args.downsample,
+helper = data_helper.DataHelper(
+    input_dir_wuhan = input_dir_wuhan,
+    input_dir_russia = input_dir_russia,
+    tag = args.tag,
+    downsample  = args.downsample,
 )
 
-helper.prep() # convert to hdf5 and write
+helper.prep()
