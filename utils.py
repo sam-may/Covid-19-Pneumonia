@@ -19,8 +19,8 @@ import nibabel
 
 def load_dcms(dcm_files):
     """
-    Load DICOM (DCM) files and retrieve CT slices. Each DCM file
-    contains just one CT slice from a given CT scan.
+    Load DICOM (DCM) files and retrieve CT slices. Each DCM file contains 
+    just one CT slice from a given CT scan.
 
     Keyword arguments:
     n -- the number of slices above and below slice of interest to include
@@ -72,14 +72,21 @@ def downsample_images(images, downsample, round=False):
 
     if (not is_power_of_two(n_pixels) or not is_power_of_two(downsample) 
         or not (n_pixels/downsample).is_integer()):
-        print("[UTILS.PY] Original image has %d pixels and you want to downsize to %d pixels, something isn't right." % (n_pixels, downsample))
+        print("[UTILS.PY] Original image has %d pixels and you want to \
+               downsize to %d something isn't right." % (n_pixels, downsample))
         sys.exit(1)
 
-    print("[UTILS.PY] Original image has %d pixels and we are downsizing to %d pixels" % (n_pixels, downsample))
+    print("[UTILS.PY] Original image has %d pixels, downsizing to %d pixels" 
+          % (n_pixels, downsample))
 
     downsampled_images = []
     for image in images:
-        downsampled_images.append(cv2.resize(image, dsize=(downsample, downsample), interpolation=cv2.INTER_CUBIC))
+        downsampled_image = cv2.resize(
+            image, 
+            dsize=(downsample, downsample), 
+            interpolation=cv2.INTER_CUBIC
+        )
+        downsampled_images.append(downsampled_image)
 
     out = numpy.array(downsampled_images)
     if round:
@@ -134,8 +141,7 @@ def plot_image_and_truth(image, truth, name, fs=6):
     plt.close(fig)
 
 def transparent_cmap(cmap, N=255):
-    "Copy colormap and set alpha values"
-
+    """Copy colormap and set alpha values"""
     mycmap = cmap
     mycmap._init()
     mycmap._lut[:,-1] = numpy.linspace(0, 0.8, N+4)
@@ -190,7 +196,13 @@ def plot_image_truth_and_pred(image, truth, pred, name, fs=6):
     ax = fig.add_subplot(236)
     plt.imshow(image_scaled, cmap='gray')
     x, y, cmap, levels = make_heatmap(truth - pred, True)
-    corrmap = plt.contourf(x, y, (truth - pred).transpose(), cmap=cmap, levels=levels)
+    corrmap = plt.contourf(
+        x, 
+        y, 
+        (truth - pred).transpose(), 
+        cmap=cmap, 
+        levels=levels
+    )
     plt.title('Truth - Prediction', fontsize=fs)
     plt.axis('off')
 
@@ -198,12 +210,22 @@ def plot_image_truth_and_pred(image, truth, pred, name, fs=6):
     fig.subplots_adjust(right=0.8)
     cbar_ax = fig.add_axes([0.85, 0.55, 0.05, 0.35])
     cbar = fig.colorbar(heatmap, cax=cbar_ax)
-    cbar.ax.set_ylabel('Pneumonia Score', rotation=270, labelpad=15, fontsize=fs) 
+    cbar.ax.set_ylabel(
+        'Pneumonia Score', 
+        rotation=270, 
+        labelpad=15, 
+        fontsize=fs
+    ) 
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
 
     cbar_ax = fig.add_axes([0.85, 0.1, 0.05, 0.35])
     cbar = fig.colorbar(corrmap, cax=cbar_ax)
-    cbar.ax.set_ylabel('Truth - Prediction', rotation=270, labelpad=15, fontsize=fs)
+    cbar.ax.set_ylabel(
+        'Truth - Prediction', 
+        rotation=270, 
+        labelpad=15, 
+        fontsize=fs
+    )
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
 
     #plt.tight_layout()
@@ -215,17 +237,19 @@ def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
     ax1 = fig.add_subplot(111)
     ax1.yaxis.set_ticks_position('both')
     ax1.grid(True)
-    
-    ax1.plot(fpr_mean, 
-             tpr_mean,
-             color='blue', 
-             label="U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std))
-    ax1.fill_between(fpr_mean,
-                     tpr_mean - (tpr_std/2.),
-                     tpr_mean + (tpr_std/2.),
-                     color='blue',
-                     alpha=0.25, label=r'$\pm 1\sigma$')
-    
+    ax1.plot(
+        fpr_mean, 
+        tpr_mean,
+        color='blue', 
+        label="U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std)
+    )
+    ax1.fill_between(
+        fpr_mean,
+        tpr_mean - (tpr_std/2.),
+        tpr_mean + (tpr_std/2.),
+        color='blue',
+        alpha=0.25, label=r'$\pm 1\sigma$'
+    )
     plt.xlim([-0.05,1.05])
     plt.ylim([-0.05,1.05])
     plt.xlabel("False Positive Rate")
