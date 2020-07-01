@@ -4,10 +4,11 @@ import tensorflow.keras as keras
 import metrics
 
 def cnn(n_pixels, config):
-    input_img = keras.layers.Input(shape=(n_pixels, n_pixels,1), name = 'input_img')
-
+    input_img = keras.layers.Input(
+        shape=(n_pixels, n_pixels,1), 
+        name='input_img'
+    )
     dropout = 0.25
-
     conv = keras.layers.Conv2D(
         32, 
         kernel_size=(5,5), 
