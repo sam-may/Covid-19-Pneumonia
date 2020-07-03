@@ -1,18 +1,18 @@
-import tensorflow as tf
+import tensorflow as tf 
 import tensorflow.keras as keras
-
-import metrics
+import metrics 
 
 def cnn(n_pixels, config):
-    input_img = keras.layers.Input(shape=(n_pixels, n_pixels,1), name = 'input_img')
+    
+    input_img = keras.layers.Input(shape=(n_pixels, n_pixels, n_pixels,1), name = 'input_img')
 
     dropout = 0.25
 
-    conv = keras.layers.Conv2D(32, kernel_size = (5,5), kernel_initializer = 'uniform', activation = 'relu',  name = 'conv_1')(input_img)
-    conv = keras.layers.MaxPooling2D(pool_size = (2,2), name = 'conv_maxpool_1')(conv)
+    conv = keras.layers.Conv3D(32, kernel_size = (5,5,5), kernel_initializer = 'uniform', activation = 'relu',  name = 'conv_1')(input_img)
+    conv = keras.layers.MaxPooling3D(pool_size = (2,2,2), name = 'conv_maxpool_1')(conv)
     conv = keras.layers.Dropout(dropout, name = 'conv_dropout_1')(conv)
-    conv = keras.layers.Conv2D(32, kernel_size = (3,3), kernel_initializer = 'uniform', activation = 'relu',  name = 'conv_2')(conv)
-    conv = keras.layers.MaxPooling2D(pool_size = (2,2), name = 'conv_maxpool_2')(conv)
+    conv = keras.layers.Conv3D(32, kernel_size = (3,3,3), kernel_initializer = 'uniform', activation = 'relu',  name = 'conv_2')(conv)
+    conv = keras.layers.MaxPooling3D(pool_size = (2,2,2), name = 'conv_maxpool_2')(conv)
     conv = keras.layers.Dropout(dropout, name = 'conv_dropout_2')(conv)
     
     conv = keras.layers.Flatten()(conv)
@@ -26,10 +26,11 @@ def cnn(n_pixels, config):
     return model
 
 def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool = 2, dropout = 0.25, batch_norm = True, activation = 'elu', conv_dict = {}):
+    
     conv = input_img
 
     for i in range(n_layers):
-        conv = keras.layers.Conv2D(n_filters, kernel_size = kernel_size,
+        conv = keras.layers.Conv3D(n_filters, kernel_size = kernel_size,
                 activation = activation,
                 kernel_initializer = 'lecun_uniform',
                 padding = 'same',
@@ -45,8 +46,8 @@ def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool = 2, dr
     if conv_dict: # store the conv before applying max pooling, so it can be used later to help give higher resolution information in the up_convs
         conv_dict['std_conv_%s' % name] = conv
 
-    if max_pool >= 2:
-        conv = keras.layers.MaxPooling2D(pool_size = (max_pool,max_pool), name = 'std_conv_maxpool_%s' % name)(conv)
+    if max_pool >= 3:
+        conv = keras.layers.MaxPooling3D(pool_size = (max_pool_max_pool,max_pool), name = 'std_conv_maxpool_%s' % name)(conv)
     
     return conv
 
@@ -54,8 +55,8 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image = None,
     conv = input_img
 
     for i in range(n_layers):
-        conv = keras.layers.Conv2DTranspose(n_filters, kernel_size,
-                strides = 2,
+        conv = keras.layers.Conv3DTranspose(n_filters, kernel_size,
+                strides = (2,2,2),
                 padding = 'same',
                 kernel_constraint = keras.constraints.max_norm(10),
                 name = 'up_conv_%s_%d' % (name, i))(conv)
@@ -70,7 +71,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image = None,
         conv = keras.layers.Concatenate()([conv, aux_image])
 
     return conv
-    
+
 def unet(config):
     n_pixels            = config["n_pixels"]
     n_filters           = config["n_filters"]
@@ -82,7 +83,7 @@ def unet(config):
     learning_rate       = config["learning_rate"]
     alpha               = config["alpha"]
 
-    input_img = keras.layers.Input(shape=(n_pixels, n_pixels, 1), name = 'input_img')
+    input_img = keras.layers.Input(shape=(n_pixels, n_pixels, n_pixels, 1), name = 'input_img')
     conv = input_img
     conv_dict = { 'input_img' : conv }
 
@@ -97,11 +98,15 @@ def unet(config):
 
     output = std_conv('out', conv, 1, 1, kernel_size, 1, dropout = 0, batch_norm = False, activation = 'sigmoid') 
 
+    checkpointer = tf.keras.callbacks.ModelCheckpoint('model.h5', verbose = 1, save_best_only = True)
+    callbacks = [tf.keras.callbacks.EarlyStopping(patience = 2, monitor = 'val_loss'),
+    tf.keras.callbacks.TensorBoard(log_dir = 'logs'),checkpointer]
+
     model = keras.models.Model(inputs = [input_img], outputs = [output])
     optimizer = keras.optimizers.Adam(lr = learning_rate)
-    model.compile(optimizer = optimizer, loss = metrics.weighted_crossentropy(alpha), metrics = ['accuracy', metrics.dice_loss])
+    model.compile(optimizer = optimizer, loss = metrics.weighted_crossentropy(alpha), metrics = ['accuracy', metrics.dice_loss], callbacks = [callbacks])
     #model.compile(optimizer = optimizer, loss = 'binary_crossentropy', metrics = ['accuracy', metrics.dice_loss])
     print(model.summary())
 
     return model
-
+© 2020 GitHub, Inc.
