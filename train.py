@@ -67,6 +67,7 @@ unet_config = {
 
 model = models.unet(unet_config)
 # Train
-helper.train(model)
+helper.train(model, unet_config)
 helper.make_roc_curve()
 helper.assess()
+helper.write_metadata()

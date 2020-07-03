@@ -279,21 +279,38 @@ class TrainHelper():
                 print("[TRAIN_HELPER] --> stopped training")
                 train_more = False
 
+        return
+
+    def write_metadata(self):
+        """
+        Write json summarizing training metadata
+        """
+
+        self.summary["weights"] = self.weights_file
+
         with open("results_%s.json" % self.tag, "w") as f_out:
-            json.dump(self.summary, f_out, indent = 4, sort_keys = True) 
+            json.dump(self.summary, f_out, indent = 4, sort_keys = True)
 
         return
 
     def make_roc_curve(self):
+        """
+        Calculate tpr, fpr, auc and uncertainties with n_jackknife jackknife 
+        samples each of size n_batches * validation generator batch size
+        """
+
+        n_jackknife = 10
+        n_batches = 3
+
         self.tprs = []
         self.fprs = []
         self.aucs = []
 
-        for i in range(10):
+        for i in range(n_jackknife): # number of bootstrap samples
             pred = []
             y = []
-            for j in range(3):
-                X, y_ = self.validation_generator.__getitem__((i*3)+j)
+            for j in range(n_batches): # number of validation set batches
+                X, y_ = self.validation_generator.__getitem__((i*n_batches)+j)
                 pred_ = self.model.predict(X)
                 y.append(y_)
                 if j == 0:
@@ -315,7 +332,27 @@ class TrainHelper():
         fpr_std = numpy.std(self.fprs, axis=0)
         auc = numpy.mean(self.aucs)
         auc_std = numpy.std(self.aucs)
-        
+
+        roc_metrics = [
+                tpr_mean.tolist(),
+                tpr_std.tolist(),
+                fpr_mean.tolist(),
+                fpr_std.tolist(),
+                auc,
+                auc_std
+        ]
+        roc_metric_labels = [
+                "tpr_mean",
+                "tpr_std",
+                "fpr_mean",
+                "fpr_std",
+                "auc",
+                "auc_std"
+        ]
+
+        for metric, label in zip(roc_metrics, roc_metric_labels):
+            self.summary[label] = metric
+
         utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
         return
 
