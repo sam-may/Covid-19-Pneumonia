@@ -17,10 +17,10 @@ def weighted_crossentropy(alpha):
     return calc_weighted_crossentropy
 
 def dice_loss(y_true, y_pred):
-    num_pos = 2*tf.reduce_sum(y_true*y_pred)
-    denom_pos = tf.reduce_sum(y_true + y_pred)
+    """
+    Calculate dice loss = 2 * intersection / size(truth) + size(pred)
+    """
+    numerator = 2*tf.reduce_sum(y_true*y_pred)
+    denominator = tf.reduce_sum(y_true + y_pred)
 
-    num_neg = 2*tf.reduce_sum((1-y_true)*(1-y_pred))
-    denom_neg = tf.reduce_sum((1-y_true) + (1-y_pred))
-
-    return 1 - ((0.5*num_pos)/denom_pos) - ((0.5*num_neg)/denom_neg)
+    return 1 - (numerator / denominator)
