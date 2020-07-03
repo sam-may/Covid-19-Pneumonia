@@ -1,4 +1,4 @@
-#import setGPU
+import setGPU
 
 import os, sys
 import argparse
