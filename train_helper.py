@@ -225,7 +225,7 @@ class TrainHelper():
             results = self.model.fit(
                 self.train_generator,
                 callbacks=callbacks_list,
-                use_multiprocessing=True,
+                use_multiprocessing=False,
                 validation_data=self.validation_generator
             )
 
