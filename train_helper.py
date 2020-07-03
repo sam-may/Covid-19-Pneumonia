@@ -126,6 +126,22 @@ class TrainHelper():
             }
         }
 
+        self.train_generator = DataGenerator(
+            file=self.file,
+            metadata=self.metadata,
+            input_shape=self.input_shape,
+            patients=self.patients_train,
+            batch_size=self.batch_size
+        )
+        self.validation_generator = DataGenerator(
+            file=self.file,
+            metadata=self.metadata,
+            input_shape=self.input_shape,
+            patients=self.patients_test,
+            batch_size=128
+        )
+ 
+
     def load_data(self):
         """
         Load input hdf5 file and set patients array, get pneumonia 
@@ -180,9 +196,9 @@ class TrainHelper():
               % self.pneumonia_fraction)
         return
 
-    def load_weights(self, weights):
-        if self.model is not None:
-            self.initialize_model()
+    def load_weights(self, model, model_config, weights):
+        self.summary["config"] = model_config
+        self.model = model
         self.model.load_weights(weights)
         return
 
@@ -202,20 +218,6 @@ class TrainHelper():
         self.n_epochs = 0
         self.bad_epochs = 0
         while train_more:
-            self.train_generator = DataGenerator(
-                file=self.file, 
-                metadata=self.metadata,
-                input_shape=self.input_shape,
-                patients=self.patients_train, 
-                batch_size=self.batch_size
-            )
-            self.validation_generator = DataGenerator(
-                file=self.file, 
-                metadata=self.metadata,
-                input_shape=self.input_shape,
-                patients=self.patients_test, 
-                batch_size=128
-            )
             self.n_epochs += 1
 
             if self.verbose:
@@ -286,7 +288,7 @@ class TrainHelper():
         Write json summarizing training metadata
         """
 
-        self.summary["weights"] = self.weights_file
+        self.summary["weights"] = self.weights_file.replace("{epoch:02d}", "01")
 
         with open("results_%s.json" % self.tag, "w") as f_out:
             json.dump(self.summary, f_out, indent = 4, sort_keys = True)

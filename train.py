@@ -5,6 +5,7 @@ import argparse
 import numpy
 import glob
 import h5py
+import json
 import utils
 import models
 import train_helper
@@ -39,6 +40,11 @@ parser.add_argument(
     type=int, 
     default=1
 )
+parser.add_argument(
+    "--load_weights",
+    help="summary json of already trained model",
+    type=str
+)
 args = parser.parse_args()
 
 # Initialize training functions
@@ -52,22 +58,42 @@ helper = train_helper.TrainHelper(
     max_epochs=args.max_epochs
 )
 
-# Initialize model
-unet_config = {
-    "input_shape": helper.input_shape,
-    "n_filters": 12,
-    "n_layers_conv": 2,
-    "n_layers_unet": 3,
-    "kernel_size": (4, 4),
-    "dropout": 0.0,
-    "batch_norm": False,
-    "learning_rate": 0.00005,
-    "alpha": 3.0
-}
+# If a summary json is supplied, just load weights (don't train)
+if args.load_weights is not None:
+    print("[train.py] Loading model from file: %s"
+            % args.load_weights)
+    with open(args.load_weights, "r") as f_in:
+        summary = json.load(f_in)
 
-model = models.unet(unet_config)
-# Train
-helper.train(model, unet_config)
+    unet_config = summary["config"]
+    model = models.unet(unet_config)
+
+    # Load weights
+    helper.load_weights(model, unet_config, summary["weights"])
+
+# Otherwise, train a model from scratch
+else:
+    # Initialize model
+    unet_config = {
+        "input_shape": helper.input_shape,
+        "n_filters": 12,
+        "n_layers_conv": 2,
+        "n_layers_unet": 3,
+        "kernel_size": (4, 4),
+        "dropout": 0.0,
+        "batch_norm": False,
+        "learning_rate": 0.00005,
+        "alpha": 3.0
+    }
+    model = models.unet(unet_config)
+
+    # Train
+    helper.train(model, unet_config)
+
+# Assessment
 helper.make_roc_curve()
 helper.assess()
-helper.write_metadata()
+
+# Only write metadata if we trained from scratch
+if args.load_weights is None:
+    helper.write_metadata()
