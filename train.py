@@ -38,7 +38,13 @@ parser.add_argument(
     "--max_epochs", 
     help="maximum number of training epochs", 
     type=int, 
-    default=3
+    default=20
+)
+parser.add_argument(
+    "--random_seed",
+    help="random seed for test/train split",
+    type=int,
+    default=0
 )
 parser.add_argument(
     "--load_weights",
@@ -55,6 +61,7 @@ helper = train_helper.TrainHelper(
     tag=args.tag,
     train_frac=0.7,
     fast=False,
+    random_seed=args.random_seed,
     max_epochs=args.max_epochs
 )
 

@@ -1,6 +1,7 @@
 import os, sys
 import numpy
 import json
+import glob
 import matplotlib.pyplot as plt
 import argparse
 
@@ -38,19 +39,32 @@ fig = plt.figure()
 ax1 = fig.add_subplot(111)
 
 for input, label, color in zip(inputs, labels, colors):
-    with open(input, "r") as f_in:
-        info = json.load(f_in)
+    full_inputs = glob.glob(input)
+    print(full_inputs)
 
-    fpr = numpy.array(info["fpr_mean"])
-    tpr = numpy.array(info["tpr_mean"])
-    tpr_unc = numpy.array(info["tpr_std"])
-    auc = info["auc"]
-    auc_unc = info["auc_std"]
+    tprs = []
+    fprs = []
+    aucs = []
+    for individual_input in full_inputs:
+        with open(individual_input, "r") as f_in:
+            info = json.load(f_in)
+
+        fprs.append(numpy.array(info["fpr_mean"]))
+        tprs.append(numpy.array(info["tpr_mean"]))
+        aucs.append(info["auc"])
+
+    fpr = numpy.mean(fprs, axis=0)
+    tpr = numpy.mean(tprs, axis=0)
+    tpr_unc = numpy.std(tprs, axis=0)
+
+    auc = numpy.mean(aucs)
+    auc_unc = numpy.std(aucs)
+    print(aucs)
 
     ax1.plot(
             fpr,
             tpr,
-            label = label + " [AUC = %.3f]" % auc,
+            label = label + " [AUC = %.3f +/- %.3f]" % (auc, auc_unc),
             color = color
     )
 

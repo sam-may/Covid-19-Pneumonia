@@ -90,6 +90,7 @@ class TrainHelper():
         self.verbose = kwargs.get('verbose', True)
         self.fast  = kwargs.get('fast', False)
         self.tag = kwargs.get('tag')
+        self.random_seed = kwargs.get('random_seed')
         # Training hyperparameters
         self.train_frac = kwargs.get('train_frac', 0.7)
         self.best_loss = 999999
@@ -167,7 +168,7 @@ class TrainHelper():
         # Note: for more rigorous comparisons we should do k-fold validation 
         # with multiple different test/train splits
         patients_shuffle = self.patients
-        random.seed(0)
+        random.seed(self.random_seed)
         random.shuffle(patients_shuffle)
         # Distribute training and testing data
         self.patients_train = patients_shuffle[:self.n_train]
@@ -305,13 +306,20 @@ class TrainHelper():
         samples each of size n_batches * validation generator batch size
         """
 
-        n_jackknife = 10
+        n_jackknife = 2
         n_batches = 3
 
         self.tprs = []
         self.fprs = []
         self.aucs = []
 
+        # Note: looping through the jackknife samples is not a very good way
+        # to calculate the uncertainty. What should be done instead is
+        # calculating mean and std dev over multiple trainings each with
+        # different test/train splits. This is done for example in 
+        # scripts/compare_2d_vs_2point5d.py
+        # Keeping the functionality below to prevent breaking the plotting
+        # scripts down the line. Should be changed soon (lazy, I know).
         for i in range(n_jackknife): # number of bootstrap samples
             pred = []
             y = []
