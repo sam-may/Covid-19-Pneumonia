@@ -97,8 +97,8 @@ class TrainHelper():
         self.early_stopping_rounds = 2
         self.increase_batch = True
         self.decay_learning_rate = False
-        self.batch_size = 8
-        self.max_batch = 128
+        self.batch_size = 16
+        self.max_batch = 256
         self.max_epochs = kwargs.get('max_epochs', 1)
         # Data
         self.input = kwargs.get('input')
@@ -163,8 +163,11 @@ class TrainHelper():
         # Calculate number of training/testing slices
         self.n_train = int(self.train_frac*float(len(self.patients)))
         self.n_test  = len(self.patients)-self.n_train
-        # Shuffle patients
+        # Shuffle patients, fixing random seed for reproducibility
+        # Note: for more rigorous comparisons we should do k-fold validation 
+        # with multiple different test/train splits
         patients_shuffle = self.patients
+        random.seed(0)
         random.shuffle(patients_shuffle)
         # Distribute training and testing data
         self.patients_train = patients_shuffle[:self.n_train]
@@ -265,6 +268,7 @@ class TrainHelper():
                     print("[TRAIN_HELPER] --> resetting bad epochs to 0")
                     print("[TRAIN_HELPER] --> continuing for another epoch")
                     self.batch_size *= 4
+                    self.train_generator.batch_size = self.batch_size
                     self.bad_epochs = 0
 
             if self.bad_epochs >= self.early_stopping_rounds:
@@ -362,10 +366,26 @@ class TrainHelper():
         """
         Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
         """
+
+        plot_summary = []
+
         slice_index = self.n_extra_slices # index of slice of interest
         for i in range(n_plots):
             input_data, truth = self.validation_generator.get_random_slice()
-            pred = self.model.predict(numpy.array([input_data]), batch_size=16)
+            pred = self.model.predict(numpy.array([input_data]), batch_size=1)
+
+            # Add image with corresponding dice coefficient to a dict
+            dice = str(
+                    numpy.array(
+                        metrics.dice_loss(truth, pred)
+                    ).flatten()[0])
+            plot_summary.append([dice, "comp_%d" % i]) 
+
+            # skip images with no pneumonia
+            if dice == 1:
+                i -= 1
+                continue
+
             # Extract slice of interest from input data
             orig = input_data[:,:,slice_index]
             # Reshape into plottable images
@@ -374,5 +394,7 @@ class TrainHelper():
             pred = pred.reshape([self.n_pixels, self.n_pixels])       
             # Plot
             utils.plot_image_truth_and_pred(orig, truth, pred, "comp_%d" % i)
+
+        self.summary["qualitative_assessments"] = plot_summary
 
         return

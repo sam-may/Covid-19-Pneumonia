@@ -71,3 +71,6 @@ legend = ax1.legend(loc='lower right')
 ax1.yaxis.set_ticks_position('both')
 ax1.grid(True)
 plt.savefig('auc_comparison.pdf')
+plt.close(fig)
+
+# TODO: add plots of accuracy vs. epoch, dice vs. epoch, bce vs. epoch

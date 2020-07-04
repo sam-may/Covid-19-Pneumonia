@@ -38,7 +38,7 @@ parser.add_argument(
     "--max_epochs", 
     help="maximum number of training epochs", 
     type=int, 
-    default=1
+    default=3
 )
 parser.add_argument(
     "--load_weights",

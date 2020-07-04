@@ -258,7 +258,7 @@ def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
     plt.savefig("plots/roc_comparison_%s.pdf" % tag)
     plt.close(fig)
    
-def calc_auc(y, pred, interp=100):
+def calc_auc(y, pred, interp=1000):
     fpr, tpr, thresh = roc_curve(y, pred)
 
     fpr_interp = numpy.linspace(0, 1, interp)
