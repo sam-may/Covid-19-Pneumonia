@@ -1,4 +1,5 @@
 import os, sys
+import argparse
 import numpy
 import h5py
 import random
@@ -11,8 +12,8 @@ import tensorflow
 import tensorflow.keras as keras
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, file, metadata, input_shape, patients, 
-                 batch_size=16, verbose=False):
+    def __init__(self, file, metadata, input_shape, patients, batch_size, 
+                 verbose=False):
         self.file = file
         self.metadata = metadata
         self.input_shape = input_shape
@@ -84,31 +85,111 @@ class DataGenerator(keras.utils.Sequence):
         return numpy.dstack(X_stack), numpy.dstack(y_stack)
 
 class TrainHelper():
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
+    def __init__(self):
+        # CLI
+        cli = argparse.ArgumentParser()
         # General
-        self.verbose = kwargs.get('verbose', True)
-        self.fast  = kwargs.get('fast', False)
-        self.tag = kwargs.get('tag')
-        self.random_seed = kwargs.get('random_seed')
-        # Training hyperparameters
-        self.train_frac = kwargs.get('train_frac', 0.7)
-        self.best_loss = 999999
-        self.delta = 0.01 # percent by which loss must improve
-        self.early_stopping_rounds = 2
-        self.increase_batch = True
-        self.decay_learning_rate = False
-        self.batch_size = 16
-        self.max_batch = 256
-        self.max_epochs = kwargs.get('max_epochs', 1)
+        cli.add_argument("-v", "--verbose", action="store_true", default=True)
+        cli.add_argument("--fast", action="store_true", default=False)
+        cli.add_argument(
+            "--tag", 
+            help="tag to identify this set", 
+            type=str, 
+            default=""
+        )
+        cli.add_argument(
+            "--random_seed",
+            help="random seed for test/train split",
+            type=int,
+            default=0
+        )
         # Data
-        self.input = kwargs.get('input')
-        self.input_metadata = kwargs.get('input_metadata')
-        self.n_extra_slices = kwargs.get('n_extra_slices', 0) # i.e. n
+        cli.add_argument(
+            "--input", 
+            help="hdf5 file with data", 
+            type=str
+        )
+        cli.add_argument(
+            "--input_metadata", 
+            help="json file with metadata", 
+            type=str
+        )
+        cli.add_argument(
+            "--summary_json",
+            help="json file with summary of already trained model",
+            type=str,
+            default=""
+        )
+        cli.add_argument(
+            "--n_extra_slices", 
+            help="extra slices above and below input", 
+            type=int, 
+            default=0
+        )
+        # Hyperparameters
+        cli.add_argument(
+            "--max_epochs", 
+            help="maximum number of training epochs", 
+            type=int, 
+            default=20
+        )
+        cli.add_argument(
+            "--training_batch_size", 
+            help="batch size for training", 
+            type=int, 
+            default=16
+        )
+        cli.add_argument(
+            "--validation_batch_size", 
+            help="batch size for validation", 
+            type=int, 
+            default=16
+        )
+        cli.add_argument(
+            "--max_batch_size", 
+            help="maximum batch size", 
+            type=int, 
+            default=16
+        )
+        cli.add_argument(
+            "--train_frac",
+            help="fraction of input used for training",
+            type=float,
+            default=0.7
+        )
+        cli.add_argument(
+            "--delta",
+            help="Percent by which loss must improve",
+            type=float,
+            default=0.01
+        )
+        cli.add_argument(
+            "--early_stopping_rounds",
+            help="Percent by which loss must improve",
+            type=int,
+            default=2
+        )
+        cli.add_argument(
+            "--increase_batch",
+            help="Increase batch if more than one 'bad' epoch",
+            action="store_true",
+            default=True
+        )
+        cli.add_argument(
+            "--decay_learning_rate",
+            help="Decay learning rate if more than one 'bad' epoch",
+            action="store_true",
+            default=False
+        )
+        # Load CLI args into namespace
+        cli.parse_args(namespace=self)
+        # Load data
         self.input_shape = (-1, -1, -1) # i.e. (M,M,2n+1)
         self.data_manager = {}
         self.n_pixels = -1 # i.e. M
         self.load_data() # sets the above three variables
+        # Set loss tracker
+        self.best_loss = 999999.0
         # Initialize results object
         self.summary = {
             "input": self.input,
@@ -126,22 +207,21 @@ class TrainHelper():
                 "accuracy": []
             }
         }
-
-        self.train_generator = DataGenerator(
+        # Initialize data generators
+        self.training_generator = DataGenerator(
             file=self.file,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
-            batch_size=self.batch_size
+            batch_size=self.training_batch_size
         )
         self.validation_generator = DataGenerator(
             file=self.file,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
-            batch_size=128
+            batch_size=self.validation_batch_size
         )
- 
 
     def load_data(self):
         """
@@ -229,7 +309,7 @@ class TrainHelper():
                       % self.n_epochs)
 
             results = self.model.fit(
-                self.train_generator,
+                self.training_generator,
                 callbacks=callbacks_list,
                 use_multiprocessing=False,
                 validation_data=self.validation_generator
@@ -240,14 +320,18 @@ class TrainHelper():
     
             # TODO: evaluate all metrics with prediction and append to summary
 
-            val_loss = results.history['val_loss'][0]
+            val_loss = results.history["val_loss"][0]
 
             for metric in ["loss", "accuracy", "dice_loss"]:
-                self.summary["metrics"][metric].append(str(results.history['val_' + metric][0]))
-                self.summary["metrics_train"][metric].append(str(results.history[metric][0]))
+                self.summary["metrics"][metric].append(
+                    str(results.history["val_" + metric][0])
+                )
+                self.summary["metrics_train"][metric].append(
+                    str(results.history[metric][0])
+                )
 
             percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
-            if (val_loss * (1. + self.delta)) < self.best_loss:
+            if (val_loss*(1. + self.delta)) < self.best_loss:
                 print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f)" 
                       % (percent_change, self.best_loss, val_loss))
                 print("[TRAIN_HELPER] --> continuing for another epoch")
@@ -263,13 +347,13 @@ class TrainHelper():
             if ((self.increase_batch or self.decay_learning_rate) 
                 and self.bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
-                if self.batch_size * 4 <= self.max_batch:
+                if self.training_batch_size*4 <= self.max_batch_size:
                     print("[TRAIN_HELPER] --> Increasing batch size from %d -> %d" 
-                          % (self.batch_size, self.batch_size*4))
+                          % (self.training_batch_size, self.training_batch_size*4))
                     print("[TRAIN_HELPER] --> resetting bad epochs to 0")
                     print("[TRAIN_HELPER] --> continuing for another epoch")
-                    self.batch_size *= 4
-                    self.train_generator.batch_size = self.batch_size
+                    self.training_batch_size *= 4
+                    self.training_generator.batch_size = self.training_batch_size
                     self.bad_epochs = 0
 
             if self.bad_epochs >= self.early_stopping_rounds:
@@ -348,20 +432,20 @@ class TrainHelper():
         auc_std = numpy.std(self.aucs)
 
         roc_metrics = [
-                tpr_mean.tolist(),
-                tpr_std.tolist(),
-                fpr_mean.tolist(),
-                fpr_std.tolist(),
-                auc,
-                auc_std
+            tpr_mean.tolist(),
+            tpr_std.tolist(),
+            fpr_mean.tolist(),
+            fpr_std.tolist(),
+            auc,
+            auc_std
         ]
         roc_metric_labels = [
-                "tpr_mean",
-                "tpr_std",
-                "fpr_mean",
-                "fpr_std",
-                "auc",
-                "auc_std"
+            "tpr_mean",
+            "tpr_std",
+            "fpr_mean",
+            "fpr_std",
+            "auc",
+            "auc_std"
         ]
 
         for metric, label in zip(roc_metrics, roc_metric_labels):
