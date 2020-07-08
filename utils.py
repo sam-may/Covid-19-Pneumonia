@@ -232,7 +232,7 @@ def plot_image_truth_and_pred(image, truth, pred, name, fs=6):
     plt.savefig('plots/unet_assessment_%s.pdf' % name, bbox_inches='tight')
     plt.close(fig)
 
-def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
+def plot_roc(fpr_mean, tpr_mean, tpr_std, auc, auc_std, tag):
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.yaxis.set_ticks_position('both')
@@ -257,13 +257,49 @@ def plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, tag):
     plt.legend(loc="lower right")
     plt.savefig("plots/roc_comparison_%s.pdf" % tag)
     plt.close(fig)
-   
-def calc_auc(y, pred, interp=1000):
-    fpr, tpr, thresh = roc_curve(y, pred)
 
-    fpr_interp = numpy.linspace(0, 1, interp)
+def interpolated_roc(y, pred, n_interp):
+    """
+    Calculate fpr and tpr in arrays of length n_interp.
+    """ 
+    
+    fpr, tpr, thresh = roc_curve(y, pred)
+    fpr_interp = numpy.linspace(0, 1, n_interp)
     tpr_interp = numpy.interp(fpr_interp, fpr, tpr)
 
+    return fpr_interp, tpr_interp
+
+def calc_auc(y, pred, n_interp=1000, n_bootstrap = -1):
+    """
+    Calculate fpr, tpr, and auc from label y and prediction pred.
+    Returns fixed length fpr/tpr arrays of size n_interp.
+    If n_bootstrap > 0, also returns uncertainties estimated through 
+    n_bootstrap bootstrap resamples.
+    """
+
+    fpr, tpr = interpolated_roc(y, pred, n_interp)
     auc_ = auc(fpr, tpr)
 
-    return fpr_interp, tpr_interp, auc_ 
+    if n_bootstrap > 0:
+        n_points = len(y)
+        bootstrap_aucs = [] 
+        bootstrap_tprs = []
+        for i in range(n_bootstrap):
+            bootstrap_indices = numpy.random.randint(0, n_points, n_points)
+            bootstrap_label = y[bootstrap_indices]
+            bootstrap_pred = pred[bootstrap_indices]
+            
+            fpr_b, tpr_b = interpolated_roc(bootstrap_label, bootstrap_pred, n_interp)
+            auc_b = auc(fpr_b, tpr_b)
+
+            bootstrap_aucs.append(auc_b)
+            bootstrap_tprs.append(tpr_b)
+
+        auc_unc = numpy.std(bootstrap_aucs)
+        tpr_unc = numpy.std(bootstrap_tprs, axis=0)
+
+    else:
+        auc_unc = -1
+        tpr_unc = -1
+
+    return fpr, tpr, auc_, auc_unc, tpr_unc

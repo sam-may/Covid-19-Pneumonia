@@ -386,56 +386,34 @@ class TrainHelper():
 
     def make_roc_curve(self):
         """
-        Calculate tpr, fpr, auc and uncertainties with n_jackknife jackknife 
-        samples each of size n_batches * validation generator batch size
+        Calculate tpr, fpr, auc and uncertainties with bootstrap resamples. 
+        Use at least n_instances examples from the validation generator
+        when calculating roc curves.
         """
 
-        n_jackknife = 2
-        n_batches = 3
+        n_instances = 10**3
 
-        self.tprs = []
-        self.fprs = []
-        self.aucs = []
+        X, y = self.validation_generator.__getitem__(0)
+        pred = self.model.predict(X)
 
-        # Note: looping through the jackknife samples is not a very good way
-        # to calculate the uncertainty. What should be done instead is
-        # calculating mean and std dev over multiple trainings each with
-        # different test/train splits. This is done for example in 
-        # scripts/compare_2d_vs_2point5d.py
-        # Keeping the functionality below to prevent breaking the plotting
-        # scripts down the line. Should be changed soon (lazy, I know).
-        for i in range(n_jackknife): # number of bootstrap samples
-            pred = []
-            y = []
-            for j in range(n_batches): # number of validation set batches
-                X, y_ = self.validation_generator.__getitem__((i*n_batches)+j)
-                pred_ = self.model.predict(X)
-                y.append(y_)
-                if j == 0:
-                    pred = pred_
-                else:
-                    pred = numpy.concatenate([pred, pred_])
+        i = 1
+        while len(y) < n_instances:
+            X_, y_ = self.validation_generator.__getitem__(i)
+            pred_ = self.model.predict(X_)
 
-            pred = numpy.array(pred)
-            y = numpy.array(y)
+            y = numpy.concatenate([y, y_])
+            pred = numpy.concatenate([pred, pred_])
 
-            fpr, tpr, auc = utils.calc_auc(y.flatten(), pred.flatten())
-            self.fprs.append(fpr)
-            self.tprs.append(tpr)
-            self.aucs.append(auc)
+            i += 1
 
-        tpr_mean = numpy.mean(self.tprs, axis=0)
-        tpr_std = numpy.std(self.tprs, axis=0)
-        fpr_mean = numpy.mean(self.fprs, axis=0)
-        fpr_std = numpy.std(self.fprs, axis=0)
-        auc = numpy.mean(self.aucs)
-        auc_std = numpy.std(self.aucs)
+        n_interp = 1000
+        n_bootstrap = 3
+        fpr_mean, tpr_mean, auc, auc_std, tpr_std = utils.calc_auc(y.flatten(), pred.flatten(), n_interp, n_bootstrap)
 
         roc_metrics = [
             tpr_mean.tolist(),
             tpr_std.tolist(),
             fpr_mean.tolist(),
-            fpr_std.tolist(),
             auc,
             auc_std
         ]
@@ -443,7 +421,6 @@ class TrainHelper():
             "tpr_mean",
             "tpr_std",
             "fpr_mean",
-            "fpr_std",
             "auc",
             "auc_std"
         ]
@@ -451,7 +428,7 @@ class TrainHelper():
         for metric, label in zip(roc_metrics, roc_metric_labels):
             self.summary[label] = metric
 
-        utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
+        utils.plot_roc(fpr_mean, tpr_mean, tpr_std, auc, auc_std, "")
         return
 
     def assess(self, n_plots=5): 
