@@ -10,66 +10,13 @@ import utils
 import models
 import train_helper
 
-# CLI
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--n_extra_slices", 
-    help="extra slices above and below input", 
-    type=int, 
-    default=0
-)
-parser.add_argument(
-    "--tag", 
-    help="tag to identify this set", 
-    type=str, 
-    default=""
-)
-parser.add_argument(
-    "--input", 
-    help="input hdf5", 
-    type=str
-)
-parser.add_argument(
-    "--input_metadata", 
-    help="json file with metadata", 
-    type=str
-)
-parser.add_argument(
-    "--max_epochs", 
-    help="maximum number of training epochs", 
-    type=int, 
-    default=20
-)
-parser.add_argument(
-    "--random_seed",
-    help="random seed for test/train split",
-    type=int,
-    default=0
-)
-parser.add_argument(
-    "--load_weights",
-    help="summary json of already trained model",
-    type=str
-)
-args = parser.parse_args()
-
 # Initialize training functions
-helper = train_helper.TrainHelper(
-    n_extra_slices=args.n_extra_slices,
-    input=args.input,
-    input_metadata=args.input_metadata,
-    tag=args.tag,
-    train_frac=0.7,
-    fast=False,
-    random_seed=args.random_seed,
-    max_epochs=args.max_epochs
-)
+helper = train_helper.TrainHelper()
 
 # If a summary json is supplied, just load weights (don't train)
-if args.load_weights is not None:
-    print("[train.py] Loading model from file: %s"
-            % args.load_weights)
-    with open(args.load_weights, "r") as f_in:
+if helper.summary_json:
+    print("[train.py] Loading model from file: %s" % helper.summary_json)
+    with open(helper.summary_json, "r") as f_in:
         summary = json.load(f_in)
 
     unet_config = summary["config"]
@@ -102,5 +49,5 @@ helper.make_roc_curve()
 helper.assess()
 
 # Only write metadata if we trained from scratch
-if args.load_weights is None:
+if not helper.summary_json:
     helper.write_metadata()
