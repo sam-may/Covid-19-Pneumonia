@@ -451,7 +451,7 @@ class TrainHelper():
         for metric, label in zip(roc_metrics, roc_metric_labels):
             self.summary[label] = metric
 
-        utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, "")
+        utils.plot_roc(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, self.tag)
         return
 
     def assess(self, n_plots=5): 
@@ -485,7 +485,12 @@ class TrainHelper():
             truth = truth.reshape([self.n_pixels, self.n_pixels])
             pred = pred.reshape([self.n_pixels, self.n_pixels])       
             # Plot
-            utils.plot_image_truth_and_pred(orig, truth, pred, "comp_%d" % i)
+            utils.plot_image_truth_and_pred(
+                orig, 
+                truth, 
+                pred, 
+                self.tag+"_comp_%d" % i
+            )
 
         self.summary["qualitative_assessments"] = plot_summary
 
