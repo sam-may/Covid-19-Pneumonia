@@ -1,7 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as keras
-
-import metrics
+import loss_functions
 
 def cnn(n_pixels, config):
     input_img = keras.layers.Input(
@@ -198,8 +197,8 @@ def unet(config):
     optimizer = keras.optimizers.Adam(lr=learning_rate)
     model.compile(
         optimizer=optimizer, 
-        loss=metrics.weighted_crossentropy(alpha), 
-        metrics=['accuracy', metrics.dice_loss]
+        loss=loss_functions.weighted_crossentropy(alpha), 
+        metrics=['accuracy', loss_functions.dice_loss]
     )
 
     print(model.summary())
