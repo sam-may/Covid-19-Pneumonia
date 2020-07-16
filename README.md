@@ -2,7 +2,7 @@
 Pneumonia segmentation model for CT scans. To be used in the context of covid-19 studies.
 
 ## Setup: instructions for getting setup on the `prp-gpu-1.t2.ucsd.edu` machine
-# If you are instead on the `AiDA-2` machine, replace each instance of `/xilinx/scratch/software/miniconda3/` with `/home/miniconda/miniconda3/` 
+0. If you are instead on the `AiDA-2` machine, replace each instance below of `/xilinx/scratch/software/miniconda3/` with `/home/miniconda/miniconda3/`
 
 1. Add the following lines to `~/.bashrc`:
 ```
