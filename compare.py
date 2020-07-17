@@ -35,7 +35,7 @@ class ModelHelper():
             self.model.load_weights(summary["weights"])
 
         # Plot-specific attributes
-        self.micro_dice_patients = []
+        self.dice_scores = []
 
     def assign_data(self, data, metadata):
         self.data = data
@@ -51,13 +51,15 @@ class ModelHelper():
     def plot_micro_dice(self, fig=None):
         """Histograms of the scores for 70% of validation cases"""
         # Get case-by-case dice scores
-        dice_scores = []
-        for patient in self.patients_test:
-            n_slices = len(self.metadata[patient])
-            for i in range(int(0.5*n_slices)):
-                X, y = self.data_generator.get_random_slice(patient=patient)
-                y_pred = self.model.predict(numpy.array([X]), batch_size=1)
-                dice_scores.append(loss_functions.dice_loss(y, y_pred))
+        dice_scores = self.dice_scores
+        if not dice_scores:
+            print("[MODEL_HELPER] Generating dice scores")
+            for patient in self.patients_test:
+                n_slices = len(self.metadata[patient])
+                for i in range(int(0.25*n_slices)):
+                    X, y = self.data_generator.get_random_slice(patient=patient)
+                    y_pred = self.model.predict(numpy.array([X]), batch_size=1)
+                    dice_scores.append(loss_functions.dice_loss(y, y_pred))
         # Plot
         plots.hist_1D(
             dice_scores, 
@@ -66,7 +68,8 @@ class ModelHelper():
             title="Micro Dice",
             xlabel="Dice Score",
             fig=fig,
-            save=(not fig)
+            save=(not fig),
+            tag=self.tag
         )
 
         if not fig:
@@ -120,7 +123,8 @@ class ModelHelper():
             auc_std, 
             self.plot_dir+self.tag+"_roc_curve.pdf",
             fig=fig,
-            save=(not fig)
+            save=(not fig),
+            tag=self.tag
         )
         return
 
@@ -233,7 +237,9 @@ class CompareHelper():
                 return model_helper.model
 
     def compare(self):
+        # Set up directories
         self.organize()
+        # Check for models
         if not self.model_helpers:
             print("[COMPARE_HELPER] No models loaded")
             return
