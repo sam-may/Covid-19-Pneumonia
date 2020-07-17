@@ -167,19 +167,6 @@ class ModelHelper():
 
 class CompareHelper():
     def __init__(self):
-        # Command Line Interface (CLI)
-        cli = argparse.ArgumentParser()
-        # General
-        cli.add_argument("-a", "--all_plots", action="store_true", default=False)
-        cli.add_argument("--micro_dice", action="store_true", default=False)
-        cli.add_argument("--roc_curve", action="store_true", default=False)
-        cli.add_argument("--side_by_side", action="store_true", default=False)
-        # Load CLI args into namespace
-        cli.parse_args(namespace=self)
-        plot_flags = (vars(cli.parse_args())).values()
-        if sum(plot_flags) == 0:
-            self.all_plots = True
-        # Other attributes
         self.model_helpers = []
         self.n_models = 0
         self.model_tags = []
