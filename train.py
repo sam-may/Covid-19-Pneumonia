@@ -5,7 +5,10 @@ import h5py
 import random
 import json
 import tensorflow.keras as keras
+import loss_functions
+import utils
 from timeit import default_timer as timer
+from datetime import datetime as dt
 
 class DataGenerator(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
@@ -16,19 +19,15 @@ class DataGenerator(keras.utils.Sequence):
         self.patients = patients
         self.batch_size = batch_size
         self.verbose = verbose
-
         self.n_instances = -1
 
     def __len__(self):
         if self.n_instances > 0:
             return self.n_instances//self.batch_size
-
         print("[DATA_GENERATOR] Counting total number of instances.")
-
         self.n_instances = 0
         for patient in self.patients:
             self.n_instances += len(self.metadata[patient])
-
         print("[DATA_GENERATOR] Found %d instances => %d batches (batch size = %d)" 
               % (self.n_instances, self.n_instances//self.batch_size, self.batch_size))
         return self.n_instances//self.batch_size
@@ -42,14 +41,13 @@ class DataGenerator(keras.utils.Sequence):
             X_, y_ = self.get_random_slice()
             X.append(X_)
             y.append(y_)
-
         if self.verbose:
             end = timer()
             print("[DATA_GENERATOR] Took %.6f seconds to load batch" % (end - start))
 
         return numpy.array(X), numpy.array(y)
 
-    def get_random_slice(self):
+    def get_random_slice(self, patient=None):
         """
         Produces a random input and label np array consisting of a 
         random CT slice of interest, as well as n slices above and 
@@ -62,7 +60,8 @@ class DataGenerator(keras.utils.Sequence):
         n = int((n_-1.0)/2.0)
         data = self.data
         # Get random patient and index of slice of interest
-        patient = random.choice(self.patients)
+        if not patient:
+            patient = random.choice(self.patients)
         n_slices = len(self.metadata[patient])
         slice_idx = random.randrange(0, n_slices)
         # Label
@@ -74,18 +73,22 @@ class DataGenerator(keras.utils.Sequence):
                 # Set slices outside of boundary to zero
                 X_stack.append(numpy.zeros((M, M)))
             elif idx == slice_idx:
+                # Slice of interest
                 X_stack.append(data[patient+"_X_"+str(slice_idx)])
             else:
+                # Extra slice
                 X_stack.append(data[patient+"_X_"+str(idx)])
-
-        return numpy.dstack(X_stack), numpy.dstack(y_stack)
+        # Stack output into a multi-channel image
+        X = numpy.dstack(X_stack)
+        y = numpy.dstack(y_stack)
+        return X, y
 
 class TrainHelper():
     """
     An object to wrap the training process with useful and necessary functions
     """
     def __init__(self):
-        # CLI
+        # Command Line Interface (CLI)
         cli = argparse.ArgumentParser()
         # General
         cli.add_argument("-v", "--verbose", action="store_true", default=True)
@@ -180,23 +183,33 @@ class TrainHelper():
         self.load_data()
         # Set loss tracker
         self.best_loss = 999999.0
+        # Initialize directory to hold output files
+        self.out_dir = "trained_models/"+self.tag+"/"
         # Initialize weights file, updated each epoch
-        self.weights_file = "weights/"+self.tag+"_weights_{epoch:02d}.hdf5"
-        # Initialize metrics and target file, written at end of training
-        self.metric_names = ["loss", "accuracy", "dice_loss"]
-        self.metrics = dict(
-            zip(self.metric_names, [[] for _ in self.metric_names])
-        )
-        self.metrics_file = self.tag+"_metrics.npz"
+        self.weights_file = (self.out_dir
+                             + "weights/"
+                             + self.tag
+                             + "_weights_{epoch:02d}.hdf5")
+        # Initialize metrics, these here are updated each epoch
+        self.metrics = {
+            "loss": [],
+            "loss_train": [],
+            "accuracy": [],
+            "accuracy_train": [],
+            "dice_loss": [],
+            "dice_loss_train": []
+        }
+        self.metrics_file = self.out_dir+self.tag+"_metrics.npz"
         # Initialize results object, written at end of training
         self.summary = {
-            "training_params": vars(cli.parse_args()),
-            "model_config": {},
-            "predictions": [],
+            "train_params": vars(cli.parse_args()),
+            "model_config": {}, # set by self.train
             "weights": self.weights_file.replace("{epoch:02d}", "01"),
             "metrics": self.metrics_file,
+            "patients_test": self.patients_test
         }
-        self.summary_file = self.tag+"_summary.json"
+        self.summary["train_params"]["input_shape"] = self.input_shape
+        self.summary_file = self.out_dir+self.tag+"_summary.json"
         # Initialize data generators
         self.training_generator = DataGenerator(
             data=self.data,
@@ -221,8 +234,6 @@ class TrainHelper():
         self.data
         self.metadata
         self.patients
-        self.data_manager
-        self.n_pixels
         self.input_shape
         self.pneumonia_fraction
         self.patients_train
@@ -233,16 +244,9 @@ class TrainHelper():
             self.metadata = json.load(f_in)
         # Get list of patients 
         self.patients = [k for k in self.metadata.keys() if "patient" in k]
-        for pt in self.patients:
-            self.data_manager[pt] = []
-            for entry in self.metadata[pt]:
-                self.data_manager[pt].append({
-                    "keys": [entry["X"], entry["y"]], 
-                    "n_pneumonia": float(entry["n_pneumonia"])
-                })
         # Derive/store input shape
         X_ = numpy.array(self.data[self.patients[0]+"_X_0"])
-        self.n_pixels = X_.shape[0]
+        n_pixels = X_.shape[0]
         self.input_shape = (X_.shape[0], X_.shape[1], 2*self.n_extra_slices+1)
         # Calculate pneumonia imbalance
         pneumonia_pixels = 0
@@ -250,8 +254,7 @@ class TrainHelper():
         for patient in self.patients:
             for entry in self.metadata[patient]:
                 pneumonia_pixels += float(entry["n_pneumonia"])
-                all_pixels += float(self.n_pixels**2)
-        # Calculate faction of pixels with pneumonia
+                all_pixels += float(n_pixels**2)
         self.pneumonia_fraction = pneumonia_pixels/all_pixels
         print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
               % self.pneumonia_fraction)
@@ -270,8 +273,12 @@ class TrainHelper():
 
     def train(self, model, model_config):
         """Train model with early stopping"""
+        # Set up directories
+        organized = self.organize()
+        if not organized:
+            return
         # Store model config and model
-        self.summary["config"] = model_config
+        self.summary["model_config"] = model_config
         self.model = model
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
@@ -292,10 +299,11 @@ class TrainHelper():
                 use_multiprocessing=False,
                 validation_data=self.validation_generator
             )
-            # Store epoch metrics
-            for name in self.metric_names:
-                self.metrics[name].append(results.history["val_"+name][0])
+            # Update epoch metrics
+            print("[TRAIN_HELPER] Saving epoch metrics")
+            for name in ["loss", "accuracy", "dice_loss"]:
                 self.metrics[name+"_train"].append(results.history[name][0])
+                self.metrics[name].append(results.history["val_"+name][0])
             # Calculate % change for early stopping
             val_loss = results.history["val_loss"][0]
             percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
@@ -336,23 +344,49 @@ class TrainHelper():
                       % (self.max_epochs))
                 print("[TRAIN_HELPER] --> stopped training")
                 train_more = False
-        # Wrap up
+        # Save summary info
         self.summarize()
         return
+
+    def organize(self):
+        """Set up directory structure where model is to be saved"""
+        print("[TRAIN_HELPER] Writing output files to "+self.out_dir)
+        if not os.path.isdir("trained_models"):
+            os.mkdir("trained_models")
+        if os.path.isfile(self.summary_file):
+            print("[TRAIN_HELPER] Model with this tag already trained")
+            print("[TRAIN_HELPER] --> check/delete "+self.out_dir)
+            print("[TRAIN_HELPER] --> aborting training")
+            return False
+        if not os.path.isdir(self.out_dir):
+            os.mkdir(self.out_dir)
+        if not os.path.isdir(self.out_dir+"weights"):
+            os.mkdir(self.out_dir+"weights")
+        if not os.path.isdir(self.out_dir+"plots"):
+            os.mkdir(self.out_dir+"plots")
+
+        return True
 
     def summarize(self):
         """
         Calculate additional performance metrics of final model and write 
         summary and metrics files
         """
+        print("[TRAIN_HELPER] Saving summary and additional metrics")
         # Write summary to json
         with open(self.summary_file, "w") as f_out:
             json.dump(self.summary, f_out, indent=4, sort_keys=True)
+        # Convert all metrics to numpy arrays
+        for name, metric in self.metrics.items():
+            self.metrics[name] = numpy.array(metric)
         # Write metrics to compressed npz
-        np.savez_compressed(self.metrics_file, **self.metrics)
+        numpy.savez_compressed(self.metrics_file, **self.metrics)
         return
 
 if __name__ == "__main__":
+    import models
+    # Initialize helper
+    helper = TrainHelper()
     # Initialize model
     unet_config = {
         "input_shape": helper.input_shape,
@@ -366,6 +400,5 @@ if __name__ == "__main__":
         "alpha": 3.0
     }
     model = models.unet(unet_config)
-
-    # Train
+    # Train model
     helper.train(model, unet_config)
