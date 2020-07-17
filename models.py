@@ -123,7 +123,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image=None,
 
     return conv
     
-def unet(config):
+def unet(config, verbose=True):
     # Unpack config
     input_shape = config["input_shape"]
     n_filters = config["n_filters"]
@@ -201,7 +201,8 @@ def unet(config):
         metrics=['accuracy', loss_functions.dice_loss]
     )
 
-    print(model.summary())
+    if verbose:
+        print(model.summary())
 
     return model
 
