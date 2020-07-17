@@ -7,14 +7,16 @@ import h5py
 import tensorflow
 import tensorflow.keras as keras
 from datetime import datetime as dt
+import matplotlib.pyplot as plt
 import loss_functions
 import plots
 import models
 from train import DataGenerator
 
 class ModelHelper():
-    def __init__(self, model, summary_json):
-        self.plot_dir = "plots/"
+    def __init__(self, model, model_dir):
+        self.plot_dir = model_dir+"plots/"
+        summary_json = glob.glob(model_dir+"*summary.json")[0]
         with open(summary_json, "r") as f_in:
             summary = json.load(f_in)
             # Load model
@@ -46,16 +48,17 @@ class ModelHelper():
             batch_size=self.validation_batch_size
         )
 
-    def plot_micro_dice(self, fig=None, axes=None, save=True):
+    def plot_micro_dice(self, fig=None):
         """Histograms of the scores for 70% of validation cases"""
         # Get case-by-case dice scores
         dice_scores = []
         for patient in self.patients_test:
             n_slices = len(self.metadata[patient])
-            for i in range(int(0.7*n_slices)):
+            for i in range(int(0.5*n_slices)):
                 X, y = self.data_generator.get_random_slice(patient=patient)
                 y_pred = self.model.predict(numpy.array([X]), batch_size=1)
                 dice_scores.append(loss_functions.dice_loss(y, y_pred))
+        # Plot
         plots.hist_1D(
             dice_scores, 
             numpy.linspace(0,1,21),
@@ -63,13 +66,15 @@ class ModelHelper():
             title="Micro Dice",
             xlabel="Dice Score",
             fig=fig,
-            axes=axes,
-            save=save
+            save=(not fig)
         )
+
+        if not fig:
+            self.side_by_side_plots()
 
         return
 
-    def plot_roc_curve(self, fig=None, axes=None, save=True):
+    def plot_roc_curve(self, fig=None):
         """
         Calculate tpr, fpr, auc and uncertainties with n_jackknife jackknife 
         samples each of size n_batches*validation generator batch size
@@ -115,12 +120,11 @@ class ModelHelper():
             auc_std, 
             self.plot_dir+self.tag+"_roc_curve.pdf",
             fig=fig,
-            axes=axes,
-            save=save
+            save=(not fig)
         )
         return
 
-    def plot_side_by_side(self, n_plots=5, fig=None, axes=None, save=True): 
+    def side_by_side_plots(self, n_plots=5, fig=None): 
         """
         Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
         """
@@ -152,8 +156,7 @@ class ModelHelper():
                 pred, 
                 self.plot_dir+self.tag+"_comp_%d.pdf" % i,
                 fig=fig,
-                axes=axes,
-                save=save
+                save=(not fig)
             )
 
         return
@@ -180,24 +183,26 @@ class CompareHelper():
         self.metadata_json = None
         self.out_dir = ""
 
-    def add_models(self, models, summary_jsons):
-        if type(summary_jsons) == str:
-            summary_jsons = glob.glob(summary_jsons)
+    def add_models(self, models, model_dirs):
+        if type(model_dirs) == str:
+            model_dirs = glob.glob(model_dir)
         if len(models) == 1:
-            for summary_json in summary_jsons:
-                self.add_model(models[0], summary_json)
-        elif len(models) != len(summary_jsons):
+            for model_dir in model_dirs:
+                self.add_model(models[0], model_dir)
+        elif len(models) != len(model_dirs):
             print("[COMPARE_HELPER] %d models provided for %d summaries"
-                  % (len(models), len(summary_jsons)))
+                  % (len(models), len(model_dirs)))
             print("[COMPARE_HELPER] --> exiting")
             return
         else:
-            for i, summary_json in enumerate(summary_jsons):
-                self.add_model(models[i], summary_json)
+            for i, model_dir in enumerate(model_dirs):
+                self.add_model(models[i], model_dir)
         return
 
-    def add_model(self, model, summary_json):
-        model_helper = ModelHelper(model, summary_json)
+    def add_model(self, model, model_dir, helper=ModelHelper):
+        if model_dir[-1] != "/":
+            model_dir += "/"
+        model_helper = helper(model, model_dir)
         if not self.data_hdf5:
             # Load data and metadata
             self.data_hdf5 = model_helper.data_hdf5
@@ -216,6 +221,7 @@ class CompareHelper():
             return
         # Store model
         print("[COMPARE_HELPER] Loaded model %s" % model_helper.tag)
+        model_helper.assign_data(self.data, self.metadata)
         self.model_helpers.append(model_helper)
         self.model_tags.append(model_helper.tag)
         self.n_models += 1
@@ -233,31 +239,44 @@ class CompareHelper():
             return
         else:
             print("[COMPARE_HELPER] Comparing loaded models")
+        # Get list of plotting functions
+        plot_func_names = []
+        for name in dir(ModelHelper):
+            attr = getattr(ModelHelper, name)
+            if callable(attr) and name.startswith("plot_"):
+                plot_func_names.append(name)
         # Loop over models, make individual plots
-        for i, model_helper in enumerate(self.model_helpers):
-            is_done = (i == self.n_models)
-            model_helper.assign_data(self.data, self.metadata)
-            if self.micro_dice or self.all_plots:
-                model_helper.plot_micro_dice()
-                model_helper.plot_micro_dice(fig=common_fig, save=is_done)
-            if self.roc_curve or self.all_plots:
-                model_helper.plot_roc_curve()
-                model_helper.plot_roc_curve(fig=common_fig, save=is_done)
-            if self.side_by_side or self.all_plots:
-                model_helper.plot_side_by_side()
+        for name in plot_func_names:
+            print("[COMPARE_HELPER] Running "+name)
+            plot_name = name.split("plot_")[-1]
+            common_fig = plt.figure()
+            for i, model_helper in enumerate(self.model_helpers):
+                plot_func = getattr(model_helper, name)
+                # Individual plot
+                plot_func()
+                # Comparison plot
+                plot_func(fig=common_fig)
+
+            common_fig.savefig(self.out_dir+plot_name)
+            plt.close(common_fig)
 
     def organize(self):
-        # Create comparisons directory
-        if not os.isdir("comparisons"):
-            os.mkdir("comparisons")
+        # Create base directory
+        if not os.path.isdir("trained_models"):
+            os.mkdir("trained_models")
+        self.out_dir = "trained_models/comparisons/"
+        if not os.path.isdir(self.out_dir):
+            os.mkdir(self.out_dir)
         # Make output directory name
-        self.out_dir = "_vs_".join([m.tag for m in self.model_helpers[:3]])
-        if self.n_models > 3:
-            self.out_dir += "_vs_%d_more" % (self.n_models - 3)
+        self.out_dir += "_vs_".join([m.tag for m in self.model_helpers[:2]])
+        if self.n_models > 2:
+            self.out_dir += "_vs_%d_more" % (self.n_models - 2)
+        # Create comparison directory
+        if not os.path.isdir(self.out_dir):
+            os.mkdir(self.out_dir)
         # Add a timestamp
-        self.out_dir += dt.today().strftime("%Y-%m-%d")
-        # Create output directory
-        if not os.isdir(self.out_dir):
+        self.out_dir += "/"+dt.today().strftime("%Y-%m-%d")+"/"
+        if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir)
 
         return
@@ -265,6 +284,6 @@ class CompareHelper():
 
 if __name__ == "__main__":
     helper = CompareHelper()
-    helper.add_model(models.unet, "2p5_1extra_test_summary.json")
-    helper.add_model(models.unet, "2p5_2extra_test_summary.json")
+    helper.add_model(models.unet, "trained_models/2p5_1extra_test")
+    helper.add_model(models.unet, "trained_models/2p5_2extra_test")
     helper.compare()
