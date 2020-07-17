@@ -3,17 +3,24 @@ from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
-def hist_1D(data, bins, name, title="", xlabel=""):
+def hist_1D(data, bins, name, title="", xlabel="", fig=None, save=True, 
+            tag=None):
     # Plot
-    fig = plt.figure()
-    plt.hist(data, bins=bins)
-    plt.title(title, fontsize=16)
+    if not fig:
+        fig = plt.figure()
+    else:
+        plt.figure(fig.number)
+    plt.hist(data, bins=bins, alpha=0.4, label=tag)
     # Formatting
+    plt.title(title, fontsize=16)
     plt.xlabel(xlabel, fontsize=16)
     plt.ylabel("Counts", fontsize=16)
+    plt.legend()
     # Save and close
-    plt.savefig(name)
-    plt.close(fig)
+    if save:
+        plt.savefig(name)
+        plt.close(fig)
+
     return
 
 def scale_image(image):
@@ -27,8 +34,9 @@ def scale_image(image):
     image *= 1./max_val
     return image
 
-def image_truth_plot(image, truth, name, fs=6):
-    fig = plt.figure()
+def image_truth_plot(image, truth, name, fs=6, fig=None, save=True):
+    if not fig:
+        fig = plt.figure()
     ax = fig.add_subplot(131)
     image_scaled = scale_image(image)
     plt.imshow(image_scaled, cmap='gray')
@@ -48,8 +56,10 @@ def image_truth_plot(image, truth, name, fs=6):
 
     plt.imshow(blend, cmap='gray')
     plt.title("Original & Truth", fontsize=fs)
-    plt.savefig(name)
-    plt.close(fig)
+    if save:
+        plt.savefig(name)
+        plt.close(fig)
+
     return fig
 
 def transparent_cmap(cmap, N=255):
@@ -72,8 +82,9 @@ def make_heatmap(pred, divergent_colormap=False):
 
     return x, y, cmap, levels
 
-def image_truth_pred_plot(image, truth, pred, name, fs=6):
-    fig = plt.figure()
+def image_truth_pred_plot(image, truth, pred, name, fs=6, fig=None, save=True):
+    if not fig:
+        fig = plt.figure()
     ax = fig.add_subplot(231)
 
     image_scaled = scale_image(image)
@@ -140,27 +151,30 @@ def image_truth_pred_plot(image, truth, pred, name, fs=6):
     )
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
 
-    plt.savefig(name, bbox_inches='tight')
-    plt.close(fig)
+    if save:
+        plt.savefig(name, bbox_inches='tight')
+        plt.close(fig)
 
     return fig
 
-def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name):
-    fig = plt.figure()
+def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name, fig=None,
+             save=True, tag=None):
+    if not fig:
+        fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.yaxis.set_ticks_position('both')
     ax1.grid(True)
     ax1.plot(
         fpr_mean, 
         tpr_mean,
-        color='blue', 
-        label="U-Net [AUC: %.3f +/- %.3f]" % (auc, auc_std)
+        # color='blue', 
+        label="%s [AUC: %.3f +/- %.3f]" % (tag, auc, auc_std)
     )
     ax1.fill_between(
         fpr_mean,
         tpr_mean - (tpr_std/2.),
         tpr_mean + (tpr_std/2.),
-        color='blue',
+        # color='blue',
         alpha=0.25, label=r'$\pm 1\sigma$'
     )
     plt.xlim([-0.05,1.05])
@@ -168,10 +182,11 @@ def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name):
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.legend(loc="lower right")
-    plt.savefig(name)
-    plt.close(fig)
+    if save:
+        plt.savefig(name)
+        plt.close(fig)
 
-    return fig
+    return
    
 def calc_auc(y, pred, interp=1000):
     fpr, tpr, thresh = roc_curve(y, pred)
