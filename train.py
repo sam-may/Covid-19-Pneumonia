@@ -8,7 +8,6 @@ import tensorflow.keras as keras
 import loss_functions
 import utils
 from timeit import default_timer as timer
-from datetime import datetime as dt
 
 class DataGenerator(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
