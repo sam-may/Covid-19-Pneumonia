@@ -165,6 +165,26 @@ class ModelHelper():
 
         return
 
+    def plot_learning_curve(self, fig=None):
+        save = (not fig)
+        if not fig:
+            fig = plt.figure()
+        else:
+            plt.figure(fig.number)
+        # Plot
+        ax1 = fig.add_subplot(111)
+        dice_loss = numpy.array(self.metrics["dice_loss"])
+        ax1.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
+        # Formatting
+        plt.xlabel("Epoch")
+        plt.ylabel("1 - Dice Coefficient")
+        plt.legend()
+        if save:
+            plt.savefig(self.plot_dir+self.tag+"learning_curve.pdf")
+            plt.close(fig)
+
+        return
+
 class CompareHelper():
     def __init__(self):
         self.model_helpers = []
@@ -277,6 +297,6 @@ class CompareHelper():
 
 if __name__ == "__main__":
     helper = CompareHelper()
-    helper.add_model(models.unet, "trained_models/2p5_1extra_test")
-    helper.add_model(models.unet, "trained_models/2p5_2extra_test")
+    helper.add_model(models.unet, "trained_models/2p5_1extra")
+    helper.add_model(models.unet, "trained_models/2p5_2extra")
     helper.compare()
