@@ -1,7 +1,6 @@
 import tensorflow as tf
 import tensorflow.keras as keras
-
-import metrics
+import loss_functions
 
 def cnn(n_pixels, config):
     input_img = keras.layers.Input(
@@ -124,7 +123,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image=None,
 
     return conv
     
-def unet(config):
+def unet(config, verbose=True):
     # Unpack config
     input_shape = config["input_shape"]
     n_filters = config["n_filters"]
@@ -198,11 +197,12 @@ def unet(config):
     optimizer = keras.optimizers.Adam(lr=learning_rate)
     model.compile(
         optimizer=optimizer, 
-        loss=metrics.weighted_crossentropy(alpha), 
-        metrics=['accuracy', metrics.dice_loss]
+        loss=loss_functions.weighted_crossentropy(alpha), 
+        metrics=['accuracy', loss_functions.dice_loss]
     )
 
-    print(model.summary())
+    if verbose:
+        print(model.summary())
 
     return model
 
