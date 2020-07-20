@@ -99,7 +99,7 @@ if __name__ == "__main__":
     unet_helper = UNETHelper()
     # Initialize model
     unet_config = {
-        "input_shape": helper.input_shape,
+        "input_shape": unet_helper.input_shape,
         "n_filters": 12,
         "n_layers_conv": 2,
         "n_layers_unet": 3,
