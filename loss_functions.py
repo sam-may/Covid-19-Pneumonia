@@ -32,3 +32,19 @@ def dice_loss(smooth):
         return 1 - (numerator / denominator)
 
     return calc_dice_loss
+
+loss_dictionary = {
+    "weighted_crossentropy" : {
+        "function" : weighted_crossentropy,
+        "args" : ["bce_alpha"]
+    },
+    "dice_loss" : {
+        "function" : dice_loss,
+        "args" : ["dice_smooth"]
+    }
+}
+
+def choose_loss(loss, loss_hyperparams):
+    function = loss_dictionary[loss]["function"]
+    args = tuple([loss_hyperparams[arg] for arg in loss_dictionary[loss]["args"]])
+    return function(args)

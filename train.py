@@ -188,6 +188,12 @@ class TrainHelper():
             type=float,
             default=3
         )
+        cli.add_argument(
+            "--loss_function",
+            help="Loss function to use during training",
+            type=str,
+            default="weighted_crossentropy"
+        )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         # Load/calculate various training parameters
@@ -408,8 +414,9 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "alpha": helper.bce_alpha,
-        "dice_smooth": helper.dice_smooth
+        "bce_alpha": helper.bce_alpha,
+        "dice_smooth": helper.dice_smooth,
+        "loss_function": helper.loss_function
     }
     model = models.unet(unet_config)
     # Train model

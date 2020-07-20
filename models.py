@@ -133,8 +133,12 @@ def unet(config, verbose=True):
     dropout = config["dropout"]
     batch_norm = config["batch_norm"]
     learning_rate = config["learning_rate"]
-    alpha = config["alpha"]
-    smooth = config["dice_smooth"]
+
+    loss_hyperparams = { 
+        "bce_alpha" : config["bce_alpha"],
+        "dice_smooth" : config["dice_smooth"]
+    }
+    loss_function = config["loss_function"]
     # Set up input
     input_img = keras.layers.Input(shape=input_shape, name='input_img')
     conv = input_img
@@ -198,8 +202,14 @@ def unet(config, verbose=True):
     optimizer = keras.optimizers.Adam(lr=learning_rate)
     model.compile(
         optimizer=optimizer, 
-        loss=loss_functions.weighted_crossentropy(alpha), 
-        metrics=['accuracy', loss_functions.dice_loss(smooth), loss_functions.weighted_crossentropy(alpha)]
+        #loss=loss_functions.weighted_crossentropy(alpha), 
+        #loss = loss_functions.loss_dictionary[loss_function],
+        loss = loss_functions.choose_loss(loss_function, loss_hyperparams),
+        metrics=[
+            'accuracy',
+            loss_functions.dice_loss(loss_hyperparams["dice_smooth"]),
+            loss_functions.weighted_crossentropy(loss_hyperparams["bce_alpha"])
+        ]
     )
 
     if verbose:
