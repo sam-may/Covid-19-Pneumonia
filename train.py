@@ -176,6 +176,18 @@ class TrainHelper():
             action="store_true",
             default=False
         )
+        cli.add_argument(
+            "--dice_smooth",
+            help="Smoothing factor to put in num/denom of dice coeff",
+            type=float,
+            default=1
+        )
+        cli.add_argument(
+            "--bce_alpha",
+            help="Weight for positive instances in binary x-entropy",
+            type=float,
+            default=3
+        )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         # Load/calculate various training parameters
@@ -396,7 +408,8 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "alpha": 3.0
+        "alpha": helper.bce_alpha,
+        "dice_smooth": helper.dice_smooth
     }
     model = models.unet(unet_config)
     # Train model

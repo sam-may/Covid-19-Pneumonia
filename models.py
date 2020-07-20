@@ -134,6 +134,7 @@ def unet(config, verbose=True):
     batch_norm = config["batch_norm"]
     learning_rate = config["learning_rate"]
     alpha = config["alpha"]
+    smooth = config["dice_smooth"]
     # Set up input
     input_img = keras.layers.Input(shape=input_shape, name='input_img')
     conv = input_img
@@ -198,7 +199,7 @@ def unet(config, verbose=True):
     model.compile(
         optimizer=optimizer, 
         loss=loss_functions.weighted_crossentropy(alpha), 
-        metrics=['accuracy', loss_functions.dice_loss]
+        metrics=['accuracy', loss_functions.dice_loss(smooth), loss_functions.weighted_crossentropy(alpha)]
     )
 
     if verbose:

@@ -3,6 +3,10 @@ import tensorflow.keras as keras
 
 def weighted_crossentropy(alpha):
     def calc_weighted_crossentropy(y_true, y_pred):
+        """
+        Calculate binary cross entropy with 
+        weight alpha applied to positive cases
+        """
         y_pred = keras.backend.clip(
             y_pred, 
             keras.backend.epsilon(), 
@@ -16,11 +20,15 @@ def weighted_crossentropy(alpha):
 
     return calc_weighted_crossentropy
 
-def dice_loss(y_true, y_pred):
-    """
-    Calculate dice loss = 2 * intersection / size(truth) + size(pred)
-    """
-    numerator = 2*tf.reduce_sum(y_true*y_pred)
-    denominator = tf.reduce_sum(y_true + y_pred)
+def dice_loss(smooth):
+    def calc_dice_loss(y_true, y_pred):
+        """
+        Calculate dice loss = 2 * (smooth + intersection) / (smooth + size(truth) + size(pred))
+        smooth parameter helps with convergence when the numerator/denominator is very small
+        """
+        numerator = 2 * (smooth + tf.reduce_sum(y_true * y_pred))
+        denominator = smooth + tf.reduce_sum(y_true + y_pred)
 
-    return 1 - (numerator / denominator)
+        return 1 - (numerator / denominator)
+
+    return calc_dice_loss
