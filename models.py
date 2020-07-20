@@ -202,8 +202,6 @@ def unet(config, verbose=True):
     optimizer = keras.optimizers.Adam(lr=learning_rate)
     model.compile(
         optimizer=optimizer, 
-        #loss=loss_functions.weighted_crossentropy(alpha), 
-        #loss = loss_functions.loss_dictionary[loss_function],
         loss = loss_functions.choose_loss(loss_function, loss_hyperparams),
         metrics=[
             'accuracy',

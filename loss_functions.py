@@ -45,6 +45,12 @@ loss_dictionary = {
 }
 
 def choose_loss(loss, loss_hyperparams):
+    if loss not in loss_dictionary.keys():
+        raise ValueError("[loss_functions.py] Loss function %s is not supported" % loss,
+                         "[loss_functions.py] Supported loss functions are:",
+                         loss_dictionary.keys()
+                         )
+    
     function = loss_dictionary[loss]["function"]
     args = tuple([loss_hyperparams[arg] for arg in loss_dictionary[loss]["args"]])
     return function(args)
