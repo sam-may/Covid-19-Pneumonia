@@ -13,7 +13,7 @@ class PlotHelper(ModelHelper):
         # Plot-specific attributes
         self.dice_scores = []
 
-    def assign_data(self, data, metadata)
+    def assign_data(self, data, metadata):
         self.data = data
         self.metadata = metadata
         self.data_generator = DataGenerator2p5D(
