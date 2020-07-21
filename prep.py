@@ -1,23 +1,20 @@
-import os, sys
-
+import os
+import sys
 import numpy
 import glob
 import h5py
-
 import matplotlib.pyplot as plt
-
 import cv2
-
 import pydicom
 import nibabel
-
 import argparse
+from helpers import data_helper
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--tag", help = "tag to identify this set", type=str, default = "")
 parser.add_argument("--downsample", help = "factor n by which to downsample images", type=int, default = 256)
 args = parser.parse_args()
 
-import data_helper
 
 input_dir_wuhan = "/public/smay/covid_ct_data/wuhan/"
 input_dir_russia = "/public/smay/covid_ct_data/russia/"

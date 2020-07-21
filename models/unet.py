@@ -1,59 +1,5 @@
-import tensorflow as tf
 import tensorflow.keras as keras
-import loss_functions
-
-def cnn(n_pixels, config):
-    input_img = keras.layers.Input(
-        shape=(n_pixels, n_pixels,1), 
-        name='input_img'
-    )
-    dropout = 0.25
-    conv = keras.layers.Conv2D(
-        32, 
-        kernel_size=(5,5), 
-        kernel_initializer='uniform', 
-        activation='relu', 
-        name='conv_1'
-    )(input_img)
-    conv = keras.layers.MaxPooling2D(
-        pool_size=(2,2), 
-        name='conv_maxpool_1'
-    )(conv)
-    conv = keras.layers.Dropout(
-        dropout, 
-        name='conv_dropout_1'
-    )(conv)
-    conv = keras.layers.Conv2D(
-        32, 
-        kernel_size=(3,3), 
-        kernel_initializer='uniform', 
-        activation='relu', 
-        name='conv_2'
-    )(conv)
-    conv = keras.layers.MaxPooling2D(
-        pool_size=(2,2), 
-        name='conv_maxpool_2'
-    )(conv)
-    conv = keras.layers.Dropout(
-        dropout, 
-        name='conv_dropout_2'
-    )(conv)
-    
-    conv = keras.layers.Flatten()(conv)
-    
-    output = keras.layers.Dense(
-        1, 
-        activation='sigmoid', 
-        kernel_initializer='lecun_uniform', 
-        name='output'
-    )(conv)
-
-    model = keras.models.Model(inputs=[input_img], outputs=[output])
-    optimizer = keras.optimizers.Adam()
-    model.compile(optimizer=optimizer, loss='binary_crossentropy')
-    print(model.summary())
-
-    return model
+from . import loss_functions
 
 def std_conv(name, input_img, n_layers, n_filters, kernel_size, max_pool=2, 
              dropout=0.25, batch_norm=True, activation='elu', conv_dict={}):
@@ -123,7 +69,7 @@ def up_conv(name, input_img, n_layers, n_filters, kernel_size, aux_image=None,
 
     return conv
     
-def unet(config, verbose=True):
+def unet2p5D(config, verbose=True):
     # Unpack config
     input_shape = config["input_shape"]
     n_filters = config["n_filters"]
