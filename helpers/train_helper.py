@@ -230,6 +230,3 @@ class TrainHelper():
         # Write metrics to compressed npz
         numpy.savez_compressed(self.metrics_file, **self.metrics)
         return
-
-    @static_method
-    def train_decorator()

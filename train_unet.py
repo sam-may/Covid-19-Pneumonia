@@ -1,8 +1,9 @@
 import tensorflow.keras as keras
-import train
+from helpers.train_helper import TrainHelper, train_decorator
 from generators_2p5d import DataGenerator
+from models.unet import unet2p5D as unet
 
-class UNETHelper(train.TrainHelper):
+class UNETHelper(TrainHelper):
     def __init__(self):
         super().__init__()
         # Initialize data generators
@@ -21,7 +22,7 @@ class UNETHelper(train.TrainHelper):
             batch_size=self.validation_batch_size
         )
 
-    @train.train_decorator
+    @train_decorator
     def train(self, model, model_config):
         """Train model with early stopping"""
         # Store model config and model
@@ -109,6 +110,6 @@ if __name__ == "__main__":
         "learning_rate": 0.00005,
         "alpha": 3.0
     }
-    model = models.unet(unet_config)
+    model = unet(unet_config)
     # Train model
     unet_helper.train(model, unet_config)
