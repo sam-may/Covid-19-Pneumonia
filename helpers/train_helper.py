@@ -154,8 +154,10 @@ class TrainHelper():
             "loss_train": [],
             "accuracy": [],
             "accuracy_train": [],
-            "dice_loss": [],
-            "dice_loss_train": []
+            "calc_dice_loss": [],
+            "calc_dice_loss_train": [],
+            "calc_weighted_crossentropy": [],
+            "calc_weighted_crossentropy_train": []
         }
         self.metrics_file = self.out_dir+self.tag+"_metrics.npz"
         # Initialize results object, written at end of training
