@@ -19,8 +19,6 @@ class CompareHelper():
             self.add_model(model_helper)
 
     def add_model(self, model_helper):
-        if model_dir[-1] != "/":
-            model_dir += "/"
         if not self.data_hdf5:
             # Load data and metadata
             self.data_hdf5 = model_helper.data_hdf5
