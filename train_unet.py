@@ -1,7 +1,7 @@
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper, train_decorator
-from generators_2p5d import DataGenerator
 from models.unet import unet2p5D as unet
+from generators import DataGenerator
 
 class UNETHelper(TrainHelper):
     def __init__(self):

@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import plots
 from helpers.compare_helper import CompareHelper
 from helpers.model_helper import ModelHelper
-from generators_2p5d import DataGenerator2p5D
 from models.unet import unet2p5D as unet
 from models import loss_functions
+from generators import DataGenerator2p5D
 
 class PlotHelper(ModelHelper):
     def __init__(self, model, model_dir):
