@@ -1,12 +1,11 @@
-import os, sys
-
+import os
+import sys
 import numpy
 import glob
 import h5py
 import json
 import random
-
-import utils
+from . import utils
 
 
 class DataHelper():
