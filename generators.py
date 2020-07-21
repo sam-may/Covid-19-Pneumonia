@@ -2,7 +2,7 @@ import numpy
 import random
 import tensorflow.keras as keras
 
-class DataGenerator(keras.utils.Sequence):
+class DataGenerator2p5D(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
                  verbose=False):
         self.data = data
