@@ -1,20 +1,20 @@
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper, train_decorator
 from models.unet import unet2p5D as unet
-from generators import DataGenerator
+from generators import DataGenerator2p5D
 
 class UNETHelper(TrainHelper):
     def __init__(self):
         super().__init__()
         # Initialize data generators
-        self.training_generator = DataGenerator(
+        self.training_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=self.training_batch_size
         )
-        self.validation_generator = DataGenerator(
+        self.validation_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
