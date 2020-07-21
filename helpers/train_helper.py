@@ -117,6 +117,24 @@ class TrainHelper():
             action="store_true",
             default=False
         )
+        cli.add_argument(
+            "--dice_smooth",
+            help="Smoothing factor to put in num/denom of dice coeff",
+            type=float,
+            default=1
+        )
+        cli.add_argument(
+            "--bce_alpha",
+            help="Weight for positive instances in binary x-entropy",
+            type=float,
+            default=3
+        )
+        cli.add_argument(
+            "--loss_function",
+            help="Loss function to use during training",
+            type=str,
+            default="weighted_crossentropy"
+        ) 
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         # Load/calculate various training parameters
@@ -136,8 +154,10 @@ class TrainHelper():
             "loss_train": [],
             "accuracy": [],
             "accuracy_train": [],
-            "dice_loss": [],
-            "dice_loss_train": []
+            "calc_dice_loss": [],
+            "calc_dice_loss_train": [],
+            "calc_weighted_crossentropy": [],
+            "calc_weighted_crossentropy_train": []
         }
         self.metrics_file = self.out_dir+self.tag+"_metrics.npz"
         # Initialize results object, written at end of training

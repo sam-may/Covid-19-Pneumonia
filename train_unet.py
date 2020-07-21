@@ -49,7 +49,7 @@ class UNETHelper(TrainHelper):
             )
             # Update epoch metrics
             print("[TRAIN_HELPER] Saving epoch metrics")
-            for name in ["loss", "accuracy", "dice_loss"]:
+            for name in ["loss", "accuracy", "calc_dice_loss", "calc_weighted_crossentropy"]:
                 self.metrics[name+"_train"].append(results.history[name][0])
                 self.metrics[name].append(results.history["val_"+name][0])
             # Calculate % change for early stopping
@@ -108,7 +108,9 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "alpha": 3.0
+        "bce_alpha": unet_helper.bce_alpha,
+        "dice_smooth": unet_helper.dice_smooth,
+        "loss_function": unet_helper.loss_function 
     }
     model = unet(unet_config)
     # Train model
