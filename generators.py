@@ -39,7 +39,7 @@ class DataGenerator2p5D(keras.utils.Sequence):
 
         return numpy.array(X), numpy.array(y)
 
-    def get_random_slice(self, patient=None):
+    def get_random_slice(self, patient=None, return_slice_idx=False):
         """
         Produces a random input and label np array consisting of a 
         random CT slice of interest, as well as n slices above and 
@@ -48,14 +48,31 @@ class DataGenerator2p5D(keras.utils.Sequence):
         Returns an input array of shape (M,M,2n+1) where M is the 
         number of pixels in a slice.
         """
+        if not patient:
+            patient = random.choice(self.patients)
+
+        n_slices = len(self.metadata[patient])
+        slice_idx = random.randrange(0, n_slices)
+
+        if return_slice_idx:
+            X, y = self.get_slice(patient, slice_idx)
+            return X, y, slice_idx
+        else:
+            return self.get_slice(patient, slice_idx)
+
+    def get_slice(self, patient, slice_idx):
+        """
+        Produces an input and label np array for a given patient 
+        and CT slice of interest, as well as n slices above and 
+        n slices below.
+
+        Returns an input array of shape (M,M,2n+1) where M is the 
+        number of pixels in a slice.
+        """
         M, M_, n_ = self.input_shape # assuming (M,M,2*n+1)
         n = int((n_-1.0)/2.0)
         data = self.data
-        # Get random patient and index of slice of interest
-        if not patient:
-            patient = random.choice(self.patients)
         n_slices = len(self.metadata[patient])
-        slice_idx = random.randrange(0, n_slices)
         # Label
         y_stack = [data[patient+"_y_"+str(slice_idx)]]
         # Stack n input slices below and n above slice of interest
