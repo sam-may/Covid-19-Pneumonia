@@ -108,7 +108,9 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "alpha": 3.0
+        "bce_alpha": unet_helper.bce_alpha,
+        "dice_smooth": unet_helper.dice_smooth,
+        "loss_function": unet_helper.loss_function 
     }
     model = unet(unet_config)
     # Train model
