@@ -4,6 +4,9 @@ import numpy
 
 class ModelHelper():
     def __init__(self, model, model_dir):
+        if model_dir[-1] != "/":
+            model_dir += "/"
+        self.model_dir = model_dir
         self.plot_dir = model_dir+"plots/"
         summary_json = glob.glob(model_dir+"*summary.json")[0]
         with open(summary_json, "r") as f_in:
