@@ -1,27 +1,10 @@
 import os
 import argparse
 import numpy
+import pandas
 import h5py
 import random
 import json
-
-def train_decorator(train_func):
-    def decorated_func(*args):
-        # Get helper class instance
-        self = args[0]
-        # Set up directories
-        organized = self.organize()
-        if not organized:
-            return
-        # Run training
-        result = train_func(*args)
-        # Save summary files
-        self.summarize()
-
-        return result
-
-    return decorated_func
-
 
 class TrainHelper():
     """
@@ -57,17 +40,29 @@ class TrainHelper():
             type=str
         )
         cli.add_argument(
+            "--n_trainings", 
+            help="Number of trainings with random test/train splits", 
+            type=int, 
+            default=1
+        )
+        # Hyperparameters
+        cli.add_argument(
             "--n_extra_slices", 
             help="extra slices above and below input", 
             type=int, 
             default=0
         )
-        # Hyperparameters
         cli.add_argument(
             "--max_epochs", 
             help="maximum number of training epochs", 
             type=int, 
             default=20
+        )
+        cli.add_argument(
+            "--train_frac",
+            help="Fraction of data to use for training",
+            type=float,
+            default=0.7
         )
         cli.add_argument(
             "--training_batch_size", 
@@ -86,12 +81,6 @@ class TrainHelper():
             help="maximum batch size", 
             type=int, 
             default=16
-        )
-        cli.add_argument(
-            "--train_frac",
-            help="fraction of input used for training",
-            type=float,
-            default=0.7
         )
         cli.add_argument(
             "--delta",
@@ -139,8 +128,9 @@ class TrainHelper():
         cli.parse_args(namespace=self)
         # Load/calculate various training parameters
         self.load_data()
-        # Set loss tracker
+        # Set trackers
         self.best_loss = 999999.0
+        self.cur_training = 0
         # Initialize directory to hold output files
         self.out_dir = "trained_models/"+self.tag+"/"
         # Initialize weights file, updated each epoch
@@ -149,24 +139,13 @@ class TrainHelper():
                              + self.tag
                              + "_weights_{epoch:02d}.hdf5")
         # Initialize metrics, these here are updated each epoch
-        self.metrics = {
-            "loss": [],
-            "loss_train": [],
-            "accuracy": [],
-            "accuracy_train": [],
-            "calc_dice_loss": [],
-            "calc_dice_loss_train": [],
-            "calc_weighted_crossentropy": [],
-            "calc_weighted_crossentropy_train": []
-        }
-        self.metrics_file = self.out_dir+self.tag+"_metrics.npz"
+        self.metrics = []
+        self.metrics_file = self.out_dir+self.tag+"_metrics.pickle"
         # Initialize results object, written at end of training
         self.summary = {
             "train_params": vars(cli.parse_args()),
             "model_config": {}, # set by self.train
-            "weights": self.weights_file.replace("{epoch:02d}", "01"),
-            "metrics": self.metrics_file,
-            "patients_test": self.patients_test
+            "patients_test": None
         }
         self.summary["train_params"]["input_shape"] = self.input_shape
         self.summary_file = self.out_dir+self.tag+"_summary.json"
@@ -203,17 +182,57 @@ class TrainHelper():
         self.pneumonia_fraction = pneumonia_pixels/all_pixels
         print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
               % self.pneumonia_fraction)
+        return
+
+    def shuffle_patients(self, random_seed=0):
         # Calculate number of training/testing slices
         n_train = int(self.train_frac*float(len(self.patients)))
         # Shuffle patients, fixing random seed for reproducibility
         # Note: for more rigorous comparisons we should do k-fold validation 
         # with multiple different test/train splits
         patients_shuffle = self.patients
-        random.seed(self.random_seed)
+        random.seed(random_seed)
         random.shuffle(patients_shuffle)
         # Distribute training and testing data
         self.patients_train = patients_shuffle[:n_train]
         self.patients_test = patients_shuffle[n_train:]
+        return
+
+    def train(self):
+        """Must be overwritten"""
+        raise NotImplementedError
+
+    def run_training(self, model, model_config):
+        """Run N trainings with different patient shuffles"""
+        # Store model config and model
+        self.summary["model_config"] = model_config
+        self.model = model
+        # Set up directories
+        self.organize()
+        # Run training
+        if self.n_trainings > 1:
+            # One process running several trainings
+            self.summary["patients_test"] = []
+            for i in range(self.n_trainings):
+                self.cur_training = i
+                self.shuffle_patients(random_seed=i)
+                self.summary["patients_test"].append(self.patients_test)
+                self.train()
+        else:
+            # One process running a single training
+            self.shuffle_patients(random_seed=self.random_seed)
+            self.summary["patients_test"] = self.patients_test
+            self.train()
+        # Wrap up
+        self.summarize()
+        return
+
+    def save_metrics(self, epoch_metrics):
+        if type(epoch_metrics) != dict:
+            raise TypeError
+        if self.n_trainings > 1:
+            epoch_metrics["training_num"] = self.cur_training
+        self.metrics.append(epoch_metrics)
         return
 
     def organize(self):
@@ -244,9 +263,6 @@ class TrainHelper():
         # Write summary to json
         with open(self.summary_file, "w") as f_out:
             json.dump(self.summary, f_out, indent=4, sort_keys=True)
-        # Convert all metrics to numpy arrays
-        for name, metric in self.metrics.items():
-            self.metrics[name] = numpy.array(metric)
-        # Write metrics to compressed npz
-        numpy.savez_compressed(self.metrics_file, **self.metrics)
+        # Write metrics dataframe to pickle file
+        pandas.DataFrame(self.metrics).to_pickle(self.metrics_file)
         return
