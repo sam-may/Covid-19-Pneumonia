@@ -79,7 +79,14 @@ def unet2p5D(config, verbose=True):
     dropout = config["dropout"]
     batch_norm = config["batch_norm"]
     learning_rate = config["learning_rate"]
-    alpha = config["alpha"]
+
+    loss_hyperparams = { 
+        "bce_alpha" : config["bce_alpha"],
+        "dice_smooth" : config["dice_smooth"]
+    }
+
+    loss_function = getattr(loss_functions, config["loss_function"])
+
     # Set up input
     input_img = keras.layers.Input(shape=input_shape, name='input_img')
     conv = input_img
@@ -143,8 +150,12 @@ def unet2p5D(config, verbose=True):
     optimizer = keras.optimizers.Adam(lr=learning_rate)
     model.compile(
         optimizer=optimizer, 
-        loss=loss_functions.weighted_crossentropy(alpha), 
-        metrics=['accuracy', loss_functions.dice_loss]
+        loss=loss_function(**loss_hyperparams),
+        metrics=[
+            'accuracy',
+            loss_functions.dice_loss(**loss_hyperparams),
+            loss_functions.weighted_crossentropy(**loss_hyperparams)
+        ]
     )
 
     if verbose:

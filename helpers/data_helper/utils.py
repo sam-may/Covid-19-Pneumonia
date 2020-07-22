@@ -22,20 +22,23 @@ def load_dcms(dcm_files):
     for dcm_file in dcm_files:
         file_data = pydicom.dcmread(dcm_file)
         if hasattr(file_data, 'SliceLocation'):
-            ct_slices.append(file_data.pixel_array)
+            ct_slices.append(file_data)
         else:
             # skip scout views
             print("[UTILS.PY] load_dcms: found slice that is a scout view (?)")
+
+    ct_slices_ = []
 
     # Sort slices head-to-toe
     slice_locs = [float(s.SliceLocation) for s in ct_slices]
     idx_sorted = numpy.flipud(numpy.argsort(slice_locs))
     ct_slices = list(numpy.array(ct_slices)[idx_sorted])
-    ct_slices.reverse() # do I need this?
+    ct_slices.reverse() 
+    for ct_slice in ct_slices:
+        ct_slices_.append(ct_slice.pixel_array)
+    return numpy.array(ct_slices_).astype(numpy.float32) 
 
-    return ct_slices
-
-def load_nii(nii_file):
+def load_nii(nii_file, flip_upside_down=False):
     """
     Decompress *.nii.gz files and retrieve CT slices. Each nii file contains
     every CT slice from a single CT scan.
@@ -43,12 +46,18 @@ def load_nii(nii_file):
     Keyword arguments:
     n -- the number of slices above and below slice of interest to include
          as additional channels
+    flip_upside_down -- whether or not to flip all of the images upside
+         down. nii's from the russia cohort need to be flipped
     """
     if not os.path.exists(nii_file):
         return None
 
     file_data = nibabel.load(nii_file).get_fdata()
-    ct_slices = numpy.flip(numpy.rot90(file_data, -1), 1).T # sorted head-to-toe
+
+    if flip_upside_down:
+        ct_slices = numpy.flip(numpy.rot90(file_data, 0), 1).T # sorted head-to-toe
+    else:
+        ct_slices = numpy.flip(numpy.rot90(file_data, 2), 1).T # sorted head-to-toe
 
     return ct_slices
 
@@ -93,4 +102,3 @@ def nonzero_entries(array):
         nonzero += list(flat[nonzero_idx])
 
     return numpy.array(nonzero)
-
