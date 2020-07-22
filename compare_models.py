@@ -69,7 +69,7 @@ class PlotHelper(ModelHelper):
             numpy.linspace(0,1,21),
             self.plot_dir+self.tag+"_micro_dice.pdf",
             title="Micro Dice",
-            xlabel="Dice Score",
+            xlabel="1 - Dice Score",
             fig=fig,
             save=(is_individual_plot),
             tag=self.tag
@@ -192,7 +192,7 @@ class PlotHelper(ModelHelper):
             truth, 
             pred, 
             self.plot_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx),
-            title="Dice Score: %0.2f" % dice_score
+            title="1 - Dice: %0.2f (%s, %d)" % (dice_score, patient, slice_idx)
         )
 
         return
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     compare_helper = CompareHelper()
     # Initialize plotting functions
     model1_helper = PlotHelper(unet, "trained_models/2p5_0extra")
-    model2_helper = PlotHelper(unet, "trained_models/2p5_5extra")
+    model2_helper = PlotHelper(unet, "trained_models/2p5_1extra")
     # Add to comparisons list
     compare_helper.add_model(model1_helper)
     compare_helper.add_model(model2_helper)
