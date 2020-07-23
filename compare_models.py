@@ -12,6 +12,9 @@ class PlotHelper(ModelHelper):
         super().__init__(model, model_dir)
         # Plot-specific attributes
         self.dice_scores = []
+        # Choose first training cohort
+        self.patients_test_0 = self.patients_test[0]
+        self.metrics_df_0 = self.metrics_df[self.metrics_df.random_seed == 0]
 
     def assign_data(self, data, metadata):
         self.data = data
@@ -20,7 +23,7 @@ class PlotHelper(ModelHelper):
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
-            patients=self.patients_test,
+            patients=self.patients_test_0,
             batch_size=self.validation_batch_size
         )
         return
@@ -34,7 +37,7 @@ class PlotHelper(ModelHelper):
         if not dice_scores:
             print("[MODEL_HELPER] Generating dice scores")
             generator = self.data_generator
-            for patient in self.patients_test:
+            for patient in self.patients_test_0:
                 n_slices = len(self.metadata[patient])
                 n_to_plot = int(0.25*n_slices)
                 batch_size = (100 if n_to_plot >= 100 else 10)
@@ -60,7 +63,11 @@ class PlotHelper(ModelHelper):
                     for i, pred in enumerate(y_pred):
                         truth = y[i]
                         slice_idx = slice_indices[i]
-                        dice_score = loss_functions.dice_loss(truth, pred)
+                        dice_score = loss_functions.dice_loss(
+                            self.dice_smooth, 
+                            truth, 
+                            pred
+                        )
                         dice_scores.append(dice_score)
                         patient_slice_pairs.append((patient, slice_idx))
         # Plot
@@ -152,7 +159,7 @@ class PlotHelper(ModelHelper):
             plt.figure(fig.number)
         # Plot
         ax1 = fig.add_subplot(111)
-        dice_loss = numpy.array(self.metrics["dice_loss"])
+        dice_loss = self.metrics_df_0.calc_dice_loss
         ax1.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
         # Formatting
         plt.xlabel("Epoch")
@@ -176,7 +183,7 @@ class PlotHelper(ModelHelper):
         # Run inference
         pred = self.model.predict(numpy.array([input_data]), batch_size=1)
         # Get dice score
-        dice_score = loss_functions.dice_loss(truth, pred)
+        dice_score = loss_functions.dice_loss(self.dice_smooth, truth, pred)
         dice = str(numpy.array(dice_score).flatten()[0])
         # Extract slice of interest from input data
         slice_index = self.n_extra_slices
@@ -201,8 +208,8 @@ if __name__ == "__main__":
     # Initialize comparison framework
     compare_helper = CompareHelper()
     # Initialize plotting functions
-    model1_helper = PlotHelper(unet, "trained_models/2p5_0extra")
-    model2_helper = PlotHelper(unet, "trained_models/2p5_1extra")
+    model1_helper = PlotHelper(unet, "trained_models/2p5_0extra_test")
+    model2_helper = PlotHelper(unet, "trained_models/2p5_1extra_test")
     # Add to comparisons list
     compare_helper.add_model(model1_helper)
     compare_helper.add_model(model2_helper)
