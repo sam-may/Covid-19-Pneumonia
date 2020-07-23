@@ -130,7 +130,6 @@ class TrainHelper():
         self.load_data()
         # Set trackers
         self.best_loss = 999999.0
-        self.cur_training = 0
         # Initialize directory to hold output files
         self.out_dir = "trained_models/"+self.tag+"/"
         # Initialize weights file, updated each epoch
@@ -145,7 +144,8 @@ class TrainHelper():
         self.summary = {
             "train_params": vars(cli.parse_args()),
             "model_config": {}, # set by self.train
-            "patients_test": None
+            "patients_test": [],
+            "random_seeds": []
         }
         self.summary["train_params"]["input_shape"] = self.input_shape
         self.summary_file = self.out_dir+self.tag+"_summary.json"
@@ -212,16 +212,17 @@ class TrainHelper():
         # Run training
         if self.n_trainings > 1:
             # One process running several trainings
-            self.summary["patients_test"] = []
             for i in range(self.n_trainings):
-                self.cur_training = i
+                self.random_seed = i
                 self.shuffle_patients(random_seed=i)
                 self.summary["patients_test"].append(self.patients_test)
+                self.summary["random_seeds"].append(self.random_seed)
                 self.train()
         else:
             # One process running a single training
             self.shuffle_patients(random_seed=self.random_seed)
-            self.summary["patients_test"] = self.patients_test
+            self.summary["patients_test"].append(self.patients_test)
+            self.summary["random_seeds"].append(self.random_seed)
             self.train()
         # Wrap up
         self.summarize()
@@ -230,9 +231,13 @@ class TrainHelper():
     def save_metrics(self, epoch_metrics):
         if type(epoch_metrics) != dict:
             raise TypeError
-        if self.n_trainings > 1:
-            epoch_metrics["training_num"] = self.cur_training
-        self.metrics.append(epoch_metrics)
+        df_row = {"random_seed": self.random_seed}
+        for key, value in epoch_metrics.items():
+            if type(value) == list:
+                df_row[key] = value[0]
+            else:
+                df_row[key] = value
+        self.metrics.append(df_row)
         return
 
     def organize(self):
