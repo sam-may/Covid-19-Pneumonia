@@ -15,6 +15,8 @@ class PlotHelper(ModelHelper):
         # Choose first training cohort
         self.patients_test_0 = self.patients_test[0]
         self.metrics_df_0 = self.metrics_df[self.metrics_df.random_seed == 0]
+        # Loss functions
+        self.dice_loss = loss_functions.dice_loss(self.dice_smooth)
 
     def assign_data(self, data, metadata):
         self.data = data
@@ -63,11 +65,7 @@ class PlotHelper(ModelHelper):
                     for i, pred in enumerate(y_pred):
                         truth = y[i]
                         slice_idx = slice_indices[i]
-                        dice_score = loss_functions.dice_loss(
-                            self.dice_smooth, 
-                            truth, 
-                            pred
-                        )
+                        dice_score = self.dice_loss(truth, pred)
                         dice_scores.append(dice_score)
                         patient_slice_pairs.append((patient, slice_idx))
         # Plot
@@ -183,7 +181,7 @@ class PlotHelper(ModelHelper):
         # Run inference
         pred = self.model.predict(numpy.array([input_data]), batch_size=1)
         # Get dice score
-        dice_score = loss_functions.dice_loss(self.dice_smooth, truth, pred)
+        dice_score = self.dice_loss(truth, pred)
         dice = str(numpy.array(dice_score).flatten()[0])
         # Extract slice of interest from input data
         slice_index = self.n_extra_slices
@@ -208,8 +206,8 @@ if __name__ == "__main__":
     # Initialize comparison framework
     compare_helper = CompareHelper()
     # Initialize plotting functions
-    model1_helper = PlotHelper(unet, "trained_models/2p5_0extra_test")
-    model2_helper = PlotHelper(unet, "trained_models/2p5_1extra_test")
+    model1_helper = PlotHelper(unet, "trained_models/2p5_0extra")
+    model2_helper = PlotHelper(unet, "trained_models/2p5_5extra")
     # Add to comparisons list
     compare_helper.add_model(model1_helper)
     compare_helper.add_model(model2_helper)
