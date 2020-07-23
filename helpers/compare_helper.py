@@ -91,10 +91,7 @@ class CompareHelper():
         if self.n_models > 2:
             self.out_dir += "_vs_%d_more" % (self.n_models - 2)
         # Create comparison directory
-        if not os.path.isdir(self.out_dir):
-            os.mkdir(self.out_dir)
-        # Add a timestamp
-        self.out_dir += "/"+dt.today().strftime("%Y-%m-%d")+"/"
+        self.out_dir += "/"
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir)
 
