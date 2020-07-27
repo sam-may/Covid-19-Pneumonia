@@ -1,11 +1,62 @@
+import numpy
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from models.unet import unet2p5D as unet
 from generators import DataGenerator2p5D
+from plots import calc_auc
 
 class UNETHelper(TrainHelper):
     def __init__(self):
         super().__init__()
+        self.cli.add_argument(
+            "--n_extra_slices", 
+            help="extra slices above and below input", 
+            type=int, 
+            default=0
+        )
+        self.cli.add_argument(
+            "--delta",
+            help="Percent by which loss must improve",
+            type=float,
+            default=0.01
+        )
+        self.cli.add_argument(
+            "--early_stopping_rounds",
+            help="Percent by which loss must improve",
+            type=int,
+            default=2
+        )
+        self.cli.add_argument(
+            "--increase_batch",
+            help="Increase batch if more than one 'bad' epoch",
+            action="store_true",
+            default=True
+        )
+        self.cli.add_argument(
+            "--decay_learning_rate",
+            help="Decay learning rate if more than one 'bad' epoch",
+            action="store_true",
+            default=False
+        )
+        self.cli.add_argument(
+            "--dice_smooth",
+            help="Smoothing factor to put in num/denom of dice coeff",
+            type=float,
+            default=1
+        )
+        self.cli.add_argument(
+            "--bce_alpha",
+            help="Weight for positive instances in binary x-entropy",
+            type=float,
+            default=3
+        )
+        self.cli.add_argument(
+            "--loss_function",
+            help="Loss function to use during training",
+            type=str,
+            default="weighted_crossentropy"
+        ) 
+        self.parse_cli()
 
     def train(self):
         """Train model with early stopping"""
@@ -29,13 +80,13 @@ class UNETHelper(TrainHelper):
         callbacks_list = [checkpoint]
         # Training loop
         train_more = True
-        self.n_epochs = 0
-        self.bad_epochs = 0
+        epoch_num = 0
+        bad_epochs = 0
         while train_more:
-            self.n_epochs += 1
+            epoch_num += 1
             if self.verbose:
                 print("[TRAIN_HELPER] On epoch %d of training model" 
-                      % self.n_epochs)
+                      % epoch_num)
             # Run training
             results = self.model.fit(
                 training_generator,
@@ -43,6 +94,23 @@ class UNETHelper(TrainHelper):
                 use_multiprocessing=False,
                 validation_data=validation_generator
             )
+            # Calculate TPR, FPR, and AUC
+            print("[TRAIN_HELPER] Calculating additional metrics")
+            y = []
+            for i in range(3): # number of validation set batches
+                X, y_ = validation_generator.__getitem__(0)
+                pred_ = self.model.predict(X)
+                y.append(y_)
+                if j == 0:
+                    pred = pred_
+                else:
+                    pred = numpy.concatenate([pred, pred_])
+            pred = numpy.array(pred)
+            y = numpy.array(y)
+            fpr, tpr, auc = plots.calc_auc(y.flatten(), pred.flatten())
+            results.history["fpr"] = fpr
+            results.history["tpr"] = tpr
+            results.history["auc"] = auc
             # Update epoch metrics
             print("[TRAIN_HELPER] Saving epoch metrics")
             self.save_metrics(results.history)
@@ -54,15 +122,15 @@ class UNETHelper(TrainHelper):
                       % (percent_change, self.best_loss, val_loss))
                 print("[TRAIN_HELPER] --> continuing for another epoch")
                 self.best_loss = val_loss
-                self.bad_epochs = 0
+                bad_epochs = 0
             else:
                 print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f)" 
                       % (percent_change, self.best_loss, val_loss)) 
                 print("[TRAIN_HELPER] --> incrementing bad epochs by 1")
-                self.bad_epochs += 1
+                bad_epochs += 1
             # Handle dynamic batch size and/or learning rate
             if ((self.increase_batch or self.decay_learning_rate) 
-                and self.bad_epochs >= 1): 
+                and bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
                 if self.training_batch_size*4 <= self.max_batch_size:
                     print("[TRAIN_HELPER] --> Increasing batch size from %d -> %d" 
@@ -71,17 +139,17 @@ class UNETHelper(TrainHelper):
                     print("[TRAIN_HELPER] --> continuing for another epoch")
                     self.training_batch_size *= 4
                     training_generator.batch_size = self.training_batch_size
-                    self.bad_epochs = 0
+                    bad_epochs = 0
             # Check for early stopping
-            if self.bad_epochs >= self.early_stopping_rounds:
+            if bad_epochs >= self.early_stopping_rounds:
                 print("[TRAIN_HELPER] Number of early stopping rounds (%d) without\
                       improvement in loss of at least %.2f percent exceeded" 
                       % (self.early_stopping_rounds, self.delta*100.))
                 print("[TRAIN_HELPER] --> stopping training after %d epochs" 
-                      % (self.n_epochs))
+                      % (epoch_num))
                 train_more = False
             # Stop training after epoch cap
-            if self.max_epochs > 0 and self.n_epochs >= self.max_epochs:
+            if self.max_epochs > 0 and epoch_num >= self.max_epochs:
                 print("[TRAIN_HELPER] Maximum number of training epochs (%d) reached" 
                       % (self.max_epochs))
                 print("[TRAIN_HELPER] --> stopped training")
@@ -89,7 +157,6 @@ class UNETHelper(TrainHelper):
         return
 
 if __name__ == "__main__":
-    import models
     # Initialize helper
     unet_helper = UNETHelper()
     # Initialize model
