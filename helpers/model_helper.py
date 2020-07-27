@@ -1,6 +1,6 @@
 import json
 import glob
-import numpy
+import pandas
 
 class ModelHelper():
     def __init__(self, model, model_dir):
@@ -13,18 +13,21 @@ class ModelHelper():
             summary = json.load(f_in)
             # Load model
             self.model = model(summary["model_config"], verbose=False)
-            train_params = summary["train_params"]
-            self.patients_test = summary["patients_test"]
-            # Training parameters
-            self.tag = train_params["tag"]
-            self.data_hdf5 = train_params["data_hdf5"]
-            self.metadata_json = train_params["metadata_json"]
-            self.input_shape = train_params["input_shape"]
+            # Load all training parameters
+            for name, value in summary["train_params"].items():
+                setattr(self, name, value)
             self.n_extra_slices = int((self.input_shape[-1] - 1)/2.0)
-            self.validation_batch_size = train_params["validation_batch_size"]
             # External files
-            self.metrics = dict(numpy.load(summary["metrics"]))
-            self.model.load_weights(summary["weights"])
+            metrics_file = self.model_dir+self.tag+"_metrics.pickle"
+            weights_file = (self.model_dir
+                            + "weights/"
+                            + self.tag
+                            + "_weights_01.hdf5")
+            self.metrics_df = pandas.read_pickle(metrics_file)
+            self.model.load_weights(weights_file)
+            # Other
+            self.patients_test = summary["patients_test"]
+            self.random_seeds = summary["random_seeds"]
 
     def assign_data(self):
         """

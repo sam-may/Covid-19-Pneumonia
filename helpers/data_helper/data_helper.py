@@ -91,7 +91,7 @@ class DataHelper():
     def find_patients(self):
         self.patients = {}
 
-        if self.input_dir_wuhan:
+        if self.input_dir_wuhan: 
             for dir in glob.glob(self.input_dir_wuhan + "/patient*/"):
                 patient = dir.split("/")[-2]
                 self.patients[patient] = {
@@ -115,8 +115,8 @@ class DataHelper():
 
     def load_data(self, patient):
         if "russia" in patient:
-            X = utils.load_nii(self.patients[patient]["features"])
-            y = utils.load_nii(self.patients[patient]["label"])
+            X = utils.load_nii(self.patients[patient]["features"], flip_upside_down=True)
+            y = utils.load_nii(self.patients[patient]["label"], flip_upside_down=True)
 
             self.add_data(patient, X, y)
 
@@ -175,9 +175,9 @@ class DataHelper():
  
     def assess(self, patient, N, tag):
         """Make plots of N randomly chosen images"""
-        output_name = "/images/image_and_truth_%s_%s_%d.pdf" % (tag, patient, i)
         if N > 0:
             for i in range(N):
+                output_name = "/images/image_and_truth_%s_%s_%d.pdf" % (tag, patient, i)
                 image, truth = self.select_random_slice(patient)    
                 output_img = self.output_dir + output_name
                 utils.plot_image_and_truth(image, truth, output_img)
@@ -185,6 +185,7 @@ class DataHelper():
         else:
             for patient, data in self.patients.items():
                 for i in range(len(data["X"])):
+                    output_name = "/images/image_and_truth_%s_%s_%d.pdf" % (tag, patient, i)
                     image, truth = data["X"][i], data["y"][i]
                     output_img = self.output_dir + output_name
                     utils.plot_image_and_truth(image, truth, output_img)

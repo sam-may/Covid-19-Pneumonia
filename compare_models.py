@@ -12,6 +12,11 @@ class PlotHelper(ModelHelper):
         super().__init__(model, model_dir)
         # Plot-specific attributes
         self.dice_scores = []
+        # Choose first training cohort
+        self.patients_test_0 = self.patients_test[0]
+        self.metrics_df_0 = self.metrics_df[self.metrics_df.random_seed == 0]
+        # Loss functions
+        self.dice_loss = loss_functions.dice_loss(self.dice_smooth)
 
     def assign_data(self, data, metadata):
         self.data = data
@@ -20,37 +25,76 @@ class PlotHelper(ModelHelper):
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
-            patients=self.patients_test,
+            patients=self.patients_test_0,
             batch_size=self.validation_batch_size
         )
         return
 
     def plot_micro_dice(self, fig=None):
         """Histograms of the scores for 70% of validation cases"""
+        is_individual_plot = (not fig)
         # Get case-by-case dice scores
         dice_scores = self.dice_scores
+        patient_slice_pairs = []
         if not dice_scores:
             print("[MODEL_HELPER] Generating dice scores")
-            for patient in self.patients_test:
+            generator = self.data_generator
+            for patient in self.patients_test_0:
                 n_slices = len(self.metadata[patient])
-                for i in range(int(0.25*n_slices)):
-                    X, y = self.data_generator.get_random_slice(patient=patient)
-                    y_pred = self.model.predict(numpy.array([X]), batch_size=1)
-                    dice_scores.append(loss_functions.dice_loss(y, y_pred))
+                n_to_plot = int(0.25*n_slices)
+                batch_size = (100 if n_to_plot >= 100 else 10)
+                for i in range(n_to_plot//batch_size):
+                    # Get a large batch of data and truth
+                    X = []
+                    y = []
+                    slice_indices = []
+                    for i in range(batch_size):
+                        X_, y_, idx_ = generator.get_random_slice(
+                            patient=patient,
+                            return_slice_idx=True
+                        )
+                        X.append(X_)
+                        y.append(y_)
+                        slice_indices.append(idx_)
+                    # Run model over entire batch
+                    y_pred = self.model.predict(
+                        numpy.array(X), 
+                        batch_size=batch_size
+                    )
+                    # Get dice loss for each prediction
+                    for i, pred in enumerate(y_pred):
+                        truth = y[i]
+                        slice_idx = slice_indices[i]
+                        dice_score = self.dice_loss(truth, pred)
+                        dice_scores.append(dice_score)
+                        patient_slice_pairs.append((patient, slice_idx))
         # Plot
         plots.hist_1D(
             dice_scores, 
             numpy.linspace(0,1,21),
             self.plot_dir+self.tag+"_micro_dice.pdf",
             title="Micro Dice",
-            xlabel="Dice Score",
+            xlabel="1 - Dice Score",
             fig=fig,
-            save=(not fig),
+            save=(is_individual_plot),
             tag=self.tag
         )
-
-        if not fig:
-            self.side_by_side_plots()
+        if is_individual_plot:
+            print("[MODEL_HELPER] Plotting slice plots")
+            dice_scores = numpy.array(dice_scores)
+            patient_slice_pairs = numpy.array(patient_slice_pairs)
+            # Sort dice scores in ascending order
+            sorted_by_score = numpy.argsort(dice_scores)
+            dice_scores = dice_scores[sorted_by_score]
+            patient_slice_pairs = patient_slice_pairs[sorted_by_score]
+            # Get evenly-spaced (in dice score) patient-slice pairs
+            assortment = numpy.linspace(0, len(dice_scores)-1, 10)
+            assortment = numpy.round(assortment).astype(int) # Round to integers
+            assortment_of_pairs = patient_slice_pairs[assortment.astype(int)]
+            # Plot
+            for patient, slice_idx in assortment_of_pairs:
+                # Explicit casting because numpy casts the tuple to strings
+                self.side_by_side_plot(str(patient), int(slice_idx))
 
         return
 
@@ -105,43 +149,6 @@ class PlotHelper(ModelHelper):
         )
         return
 
-    def side_by_side_plots(self, n_plots=5, fig=None): 
-        """
-        Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
-        """
-        slice_index = self.n_extra_slices # index of slice of interest
-        for i in range(n_plots):
-            input_data, truth = self.data_generator.get_random_slice()
-            pred = self.model.predict(numpy.array([input_data]), batch_size=1)
-
-            # Add image with corresponding dice coefficient to a dict
-            dice_loss = numpy.array(loss_functions.dice_loss(truth, pred))
-            dice = str(dice_loss.flatten()[0])
-
-            # Skip images with no pneumonia
-            if dice == 1:
-                i -= 1
-                continue
-
-            # Extract slice of interest from input data
-            orig = input_data[:,:,slice_index]
-            # Reshape into plottable images
-            M = self.input_shape[0]
-            image = orig.reshape([M, M])
-            truth = truth.reshape([M, M])
-            pred = pred.reshape([M, M])       
-            # Plot
-            plots.image_truth_pred_plot(
-                image, 
-                truth, 
-                pred, 
-                self.plot_dir+self.tag+"_comp_%d.pdf" % i,
-                fig=fig,
-                save=(not fig)
-            )
-
-        return
-
     def plot_learning_curve(self, fig=None):
         save = (not fig)
         if not fig:
@@ -150,7 +157,7 @@ class PlotHelper(ModelHelper):
             plt.figure(fig.number)
         # Plot
         ax1 = fig.add_subplot(111)
-        dice_loss = numpy.array(self.metrics["dice_loss"])
+        dice_loss = self.metrics_df_0.calc_dice_loss
         ax1.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
         # Formatting
         plt.xlabel("Epoch")
@@ -159,6 +166,39 @@ class PlotHelper(ModelHelper):
         if save:
             plt.savefig(self.plot_dir+self.tag+"learning_curve.pdf")
             plt.close(fig)
+
+        return
+
+    def side_by_side_plot(self, patient=None, slice_idx=None): 
+        """
+        Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
+        """
+        # Get data
+        if not patient or not slice_idx:
+            input_data, truth = self.data_generator.get_random_slice(patient=patient)
+        else:
+            input_data, truth = self.data_generator.get_slice(patient, slice_idx)
+        # Run inference
+        pred = self.model.predict(numpy.array([input_data]), batch_size=1)
+        # Get dice score
+        dice_score = self.dice_loss(truth, pred)
+        dice = str(numpy.array(dice_score).flatten()[0])
+        # Extract slice of interest from input data
+        slice_index = self.n_extra_slices
+        orig = input_data[:,:,slice_index]
+        # Reshape into plottable images
+        M = self.input_shape[0]
+        image = orig.reshape([M, M])
+        truth = truth.reshape([M, M])
+        pred = pred.reshape([M, M])       
+        # Plot
+        plots.image_truth_pred_plot(
+            image, 
+            truth, 
+            pred, 
+            self.plot_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx),
+            title="1 - Dice: %0.2f (%s, %d)" % (dice_score, patient, slice_idx)
+        )
 
         return
 

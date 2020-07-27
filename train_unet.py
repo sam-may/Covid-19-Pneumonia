@@ -1,33 +1,29 @@
 import tensorflow.keras as keras
-from helpers.train_helper import TrainHelper, train_decorator
+from helpers.train_helper import TrainHelper
 from models.unet import unet2p5D as unet
 from generators import DataGenerator2p5D
 
 class UNETHelper(TrainHelper):
     def __init__(self):
         super().__init__()
+
+    def train(self):
+        """Train model with early stopping"""
         # Initialize data generators
-        self.training_generator = DataGenerator2p5D(
+        training_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=self.training_batch_size
         )
-        self.validation_generator = DataGenerator2p5D(
+        validation_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
             batch_size=self.validation_batch_size
         )
-
-    @train_decorator
-    def train(self, model, model_config):
-        """Train model with early stopping"""
-        # Store model config and model
-        self.summary["model_config"] = model_config
-        self.model = model
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
         callbacks_list = [checkpoint]
@@ -42,16 +38,14 @@ class UNETHelper(TrainHelper):
                       % self.n_epochs)
             # Run training
             results = self.model.fit(
-                self.training_generator,
+                training_generator,
                 callbacks=callbacks_list,
                 use_multiprocessing=False,
-                validation_data=self.validation_generator
+                validation_data=validation_generator
             )
             # Update epoch metrics
             print("[TRAIN_HELPER] Saving epoch metrics")
-            for name in ["loss", "accuracy", "dice_loss"]:
-                self.metrics[name+"_train"].append(results.history[name][0])
-                self.metrics[name].append(results.history["val_"+name][0])
+            self.save_metrics(results.history)
             # Calculate % change for early stopping
             val_loss = results.history["val_loss"][0]
             percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
@@ -76,7 +70,7 @@ class UNETHelper(TrainHelper):
                     print("[TRAIN_HELPER] --> resetting bad epochs to 0")
                     print("[TRAIN_HELPER] --> continuing for another epoch")
                     self.training_batch_size *= 4
-                    self.training_generator.batch_size = self.training_batch_size
+                    training_generator.batch_size = self.training_batch_size
                     self.bad_epochs = 0
             # Check for early stopping
             if self.bad_epochs >= self.early_stopping_rounds:
@@ -108,8 +102,10 @@ if __name__ == "__main__":
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "alpha": 3.0
+        "bce_alpha": unet_helper.bce_alpha,
+        "dice_smooth": unet_helper.dice_smooth,
+        "loss_function": unet_helper.loss_function 
     }
     model = unet(unet_config)
     # Train model
-    unet_helper.train(model, unet_config)
+    unet_helper.run_training(model, unet_config)
