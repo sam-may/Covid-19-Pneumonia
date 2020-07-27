@@ -82,7 +82,7 @@ def make_heatmap(pred, divergent_colormap=False):
 
     return x, y, cmap, levels
 
-def image_truth_pred_plot(image, truth, pred, name, fs=6, fig=None, save=True):
+def image_truth_pred_plot(image, truth, pred, name, title=None, fs=6, fig=None, save=True):
     if not fig:
         fig = plt.figure()
     ax = fig.add_subplot(231)
@@ -150,6 +150,8 @@ def image_truth_pred_plot(image, truth, pred, name, fs=6, fig=None, save=True):
         fontsize=fs
     )
     cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
+
+    fig.suptitle(title)
 
     if save:
         plt.savefig(name, bbox_inches='tight')
