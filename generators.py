@@ -4,12 +4,13 @@ import tensorflow.keras as keras
 
 class DataGenerator2p5D(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
-                 verbose=False):
+                 extra_slice_step, verbose=False):
         self.data = data
         self.metadata = metadata
         self.input_shape = input_shape
         self.patients = patients
         self.batch_size = batch_size
+        self.extra_slice_step = extra_slice_step
         self.verbose = verbose
         self.n_instances = -1
 
@@ -69,15 +70,17 @@ class DataGenerator2p5D(keras.utils.Sequence):
         Returns an input array of shape (M,M,2n+1) where M is the 
         number of pixels in a slice.
         """
+        # Convenient shorthand
         M, M_, n_ = self.input_shape # assuming (M,M,2*n+1)
         n = int((n_-1.0)/2.0)
+        s = self.extra_slice_step
         data = self.data
         n_slices = len(self.metadata[patient])
         # Label
         y_stack = [data[patient+"_y_"+str(slice_idx)]]
         # Stack n input slices below and n above slice of interest
         X_stack = []
-        for idx in range(slice_idx-n, slice_idx+n+1):
+        for idx in range(slice_idx-n*s, slice_idx+n*s+1, s):
             if idx < 0 or idx > n_slices-1:
                 # Set slices outside of boundary to zero
                 X_stack.append(numpy.zeros((M, M)))

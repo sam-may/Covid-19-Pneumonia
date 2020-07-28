@@ -15,6 +15,12 @@ class UNETHelper(TrainHelper):
             default=0
         )
         self.cli.add_argument(
+            "--extra_slice_step", 
+            help="Steps between extra slices", 
+            type=int, 
+            default=1
+        )
+        self.cli.add_argument(
             "--delta",
             help="Percent by which loss must improve",
             type=float,
@@ -72,14 +78,16 @@ class UNETHelper(TrainHelper):
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
-            batch_size=self.training_batch_size
+            batch_size=self.training_batch_size,
+            extra_slice_step=self.extra_slice_step
         )
         validation_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
-            batch_size=self.validation_batch_size
+            batch_size=self.validation_batch_size,
+            extra_slice_step=self.extra_slice_step
         )
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
