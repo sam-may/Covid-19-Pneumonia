@@ -149,12 +149,10 @@ class TrainHelper():
         }
         self.summary["train_params"]["input_shape"] = self.input_shape
         self.summary_file = self.out_dir+self.tag+"_summary.json"
-
     def load_data(self):
         """
         Load input hdf5 file and metadata json, interpret and set attributes 
         listed below:
-
         self.data
         self.metadata
         self.patients
