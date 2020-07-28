@@ -1,7 +1,7 @@
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
-from models.unet import unet2p5D as unet
-from generators import DataGenerator2p5D
+from models.unet import unet3D as unet
+from generators import DataGenerator3D
 
 class UNETHelper(TrainHelper):
     def __init__(self):
@@ -10,14 +10,14 @@ class UNETHelper(TrainHelper):
     def train(self):
         """Train model with early stopping"""
         # Initialize data generators
-        training_generator = DataGenerator2p5D(
+        training_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=self.training_batch_size
         )
-        validation_generator = DataGenerator2p5D(
+        validation_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         "n_filters": 12,
         "n_layers_conv": 2,
         "n_layers_unet": 3,
-        "kernel_size": (4, 4),
+        "kernel_size": (3,3,3),
         "dropout": 0.0,
         "batch_norm": False,
         "learning_rate": 0.00005,
