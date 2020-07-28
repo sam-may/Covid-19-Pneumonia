@@ -56,6 +56,12 @@ class UNETHelper(TrainHelper):
             type=str,
             default="weighted_crossentropy"
         ) 
+        self.cli.add_argument(
+            "--roc_batches",
+            help="Number of batches for calculating ROC metrics",
+            type=int,
+            default=3
+        ) 
         self.parse_cli()
 
     def train(self):
@@ -85,7 +91,7 @@ class UNETHelper(TrainHelper):
         while train_more:
             epoch_num += 1
             if self.verbose:
-                print("[TRAIN_HELPER] On epoch %d of training model" 
+                print("[TRAIN_UNET] On epoch %d of training model" 
                       % epoch_num)
             # Run training
             results = self.model.fit(
@@ -95,64 +101,63 @@ class UNETHelper(TrainHelper):
                 validation_data=validation_generator
             )
             # Calculate TPR, FPR, and AUC
-            print("[TRAIN_HELPER] Calculating additional metrics")
             y = []
-            for i in range(3): # number of validation set batches
+            for i in range(self.roc_batches):
                 X, y_ = validation_generator.__getitem__(0)
                 pred_ = self.model.predict(X)
                 y.append(y_)
-                if j == 0:
+                if i == 0:
                     pred = pred_
                 else:
                     pred = numpy.concatenate([pred, pred_])
             pred = numpy.array(pred)
             y = numpy.array(y)
-            fpr, tpr, auc = plots.calc_auc(y.flatten(), pred.flatten())
+            fpr, tpr, auc = calc_auc(y.flatten(), pred.flatten())
             results.history["fpr"] = fpr
             results.history["tpr"] = tpr
             results.history["auc"] = auc
             # Update epoch metrics
-            print("[TRAIN_HELPER] Saving epoch metrics")
+            print("[TRAIN_UNET] Saving epoch metrics")
             self.save_metrics(results.history)
             # Calculate % change for early stopping
             val_loss = results.history["val_loss"][0]
             percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
             if (val_loss*(1. + self.delta)) < self.best_loss:
-                print("[TRAIN_HELPER] Loss improved by %.2f percent (%.3f -> %.3f)" 
+                print("[TRAIN_UNET] Loss improved by %.2f percent (%.3f -> %.3f)" 
                       % (percent_change, self.best_loss, val_loss))
-                print("[TRAIN_HELPER] --> continuing for another epoch")
+                print("[TRAIN_UNET] --> continuing for another epoch")
                 self.best_loss = val_loss
                 bad_epochs = 0
             else:
-                print("[TRAIN_HELPER] Change in loss was %.2f percent (%.3f -> %.3f)" 
+                print("[TRAIN_UNET] Change in loss was %.2f percent (%.3f -> %.3f)" 
                       % (percent_change, self.best_loss, val_loss)) 
-                print("[TRAIN_HELPER] --> incrementing bad epochs by 1")
+                print("[TRAIN_UNET] --> incrementing bad epochs by 1")
                 bad_epochs += 1
             # Handle dynamic batch size and/or learning rate
             if ((self.increase_batch or self.decay_learning_rate) 
                 and bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
                 if self.training_batch_size*4 <= self.max_batch_size:
-                    print("[TRAIN_HELPER] --> Increasing batch size from %d -> %d" 
+                    print("[TRAIN_UNET] --> Increasing batch size from %d -> %d" 
                           % (self.training_batch_size, self.training_batch_size*4))
-                    print("[TRAIN_HELPER] --> resetting bad epochs to 0")
-                    print("[TRAIN_HELPER] --> continuing for another epoch")
+                    print("[TRAIN_UNET] --> resetting bad epochs to 0")
+                    print("[TRAIN_UNET] --> continuing for another epoch")
                     self.training_batch_size *= 4
                     training_generator.batch_size = self.training_batch_size
                     bad_epochs = 0
             # Check for early stopping
             if bad_epochs >= self.early_stopping_rounds:
-                print("[TRAIN_HELPER] Number of early stopping rounds (%d) without\
+                print("[TRAIN_UNET] Number of early stopping rounds (%d) without\
                       improvement in loss of at least %.2f percent exceeded" 
                       % (self.early_stopping_rounds, self.delta*100.))
-                print("[TRAIN_HELPER] --> stopping training after %d epochs" 
+                print("[TRAIN_UNET] --> stopping training after %d epochs" 
                       % (epoch_num))
                 train_more = False
             # Stop training after epoch cap
             if self.max_epochs > 0 and epoch_num >= self.max_epochs:
-                print("[TRAIN_HELPER] Maximum number of training epochs (%d) reached" 
+                print("[TRAIN_UNET] Maximum number of training epochs (%d) reached" 
                       % (self.max_epochs))
-                print("[TRAIN_HELPER] --> stopped training")
+                print("[TRAIN_UNET] --> stopped training")
                 train_more = False
         return
 
