@@ -2,7 +2,7 @@ import numpy
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from models.unet import unet2p5D as unet
-from generators import DataGenerator2p5D
+from generators.unet import DataGenerator2p5D
 from plots import calc_auc
 
 class UNETHelper(TrainHelper):
