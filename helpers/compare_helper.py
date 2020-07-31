@@ -68,7 +68,7 @@ class CompareHelper():
         for name in plot_func_names:
             print("[COMPARE_HELPER] Running "+name)
             plot_name = name.split("plot_")[-1]
-            common_fig = plt.figure()
+            common_fig, _ = plt.subplots()
             for i, model_helper in enumerate(self.model_helpers):
                 plot_func = getattr(model_helper, name)
                 # Individual plot

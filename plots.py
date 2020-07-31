@@ -162,17 +162,18 @@ def image_truth_pred_plot(image, truth, pred, name, title=None, fs=6, fig=None, 
 def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name, fig=None,
              save=True, tag=None):
     if not fig:
-        fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    ax1.yaxis.set_ticks_position('both')
-    ax1.grid(True)
-    ax1.plot(
+        fig, axes = plt.subplots()
+    else:
+        axes = fig.axes[0]
+    axes.yaxis.set_ticks_position('both')
+    axes.grid(True)
+    axes.plot(
         fpr_mean, 
         tpr_mean,
         # color='blue', 
         label="%s [AUC: %.3f +/- %.3f]" % (tag, auc, auc_std)
     )
-    ax1.fill_between(
+    axes.fill_between(
         fpr_mean,
         tpr_mean - (tpr_std/2.),
         tpr_mean + (tpr_std/2.),

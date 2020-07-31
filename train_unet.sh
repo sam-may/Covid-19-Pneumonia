@@ -2,8 +2,10 @@ python train_unet.py \
 --data_hdf5="/xilinx/scratch/covid_ct_data/6Jun2020_full_z_score_downsample256/features.hdf5" \
 --metadata_json="/xilinx/scratch/covid_ct_data/6Jun2020_full_z_score_downsample256/features.json" \
 --n_extra_slices=1 \
---tag="2p5_1extra_test" \
+--extra_slice_step=2 \
+--tag="2p5_1extra_2step_test" \
 --max_epochs=1 \
+--n_trainings=1 \
 --training_batch_size=16 \
 --validation_batch_size=16 \
 --max_batch_size=64 \

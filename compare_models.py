@@ -5,7 +5,7 @@ from helpers.compare_helper import CompareHelper
 from helpers.model_helper import ModelHelper
 from models.unet import unet2p5D as unet
 from models import loss_functions
-from generators import DataGenerator2p5D
+from generators.unet import DataGenerator2p5D
 
 class PlotHelper(ModelHelper):
     def __init__(self, model, model_dir):
@@ -152,13 +152,13 @@ class PlotHelper(ModelHelper):
     def plot_learning_curve(self, fig=None):
         save = (not fig)
         if not fig:
-            fig = plt.figure()
+            fig, axes = plt.subplots()
         else:
             plt.figure(fig.number)
+            axes = fig.axes[0]
         # Plot
-        ax1 = fig.add_subplot(111)
         dice_loss = self.metrics_df_0.calc_dice_loss
-        ax1.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
+        axes.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
         # Formatting
         plt.xlabel("Epoch")
         plt.ylabel("1 - Dice Coefficient")
