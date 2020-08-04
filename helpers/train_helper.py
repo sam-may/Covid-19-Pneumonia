@@ -12,120 +12,74 @@ class TrainHelper():
     """
     def __init__(self):
         # Command Line Interface (CLI)
-        cli = argparse.ArgumentParser()
+        self.cli = argparse.ArgumentParser()
         # General
-        cli.add_argument("-v", "--verbose", action="store_true", default=True)
-        cli.add_argument("--fast", action="store_true", default=False)
-        cli.add_argument(
+        self.cli.add_argument("-v", "--verbose", action="store_true", default=True)
+        self.cli.add_argument("--fast", action="store_true", default=False)
+        self.cli.add_argument(
             "--tag", 
             help="tag to identify this set", 
             type=str, 
             default=""
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--random_seed",
             help="random seed for test/train split",
             type=int,
             default=0
         )
         # Data
-        cli.add_argument(
+        self.cli.add_argument(
             "--data_hdf5", 
             help="hdf5 file with data", 
             type=str
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--metadata_json", 
             help="json file with metadata", 
             type=str
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--n_trainings", 
             help="Number of trainings with random test/train splits", 
             type=int, 
             default=1
         )
         # Hyperparameters
-        cli.add_argument(
-            "--n_extra_slices", 
-            help="extra slices above and below input", 
-            type=int, 
-            default=0
-        )
-        cli.add_argument(
+        self.cli.add_argument(
             "--max_epochs", 
             help="maximum number of training epochs", 
             type=int, 
             default=20
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--train_frac",
             help="Fraction of data to use for training",
             type=float,
             default=0.7
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--training_batch_size", 
             help="batch size for training", 
             type=int, 
             default=16
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--validation_batch_size", 
             help="batch size for validation", 
             type=int, 
             default=16
         )
-        cli.add_argument(
+        self.cli.add_argument(
             "--max_batch_size", 
             help="maximum batch size", 
             type=int, 
             default=16
         )
-        cli.add_argument(
-            "--delta",
-            help="Percent by which loss must improve",
-            type=float,
-            default=0.01
-        )
-        cli.add_argument(
-            "--early_stopping_rounds",
-            help="Percent by which loss must improve",
-            type=int,
-            default=2
-        )
-        cli.add_argument(
-            "--increase_batch",
-            help="Increase batch if more than one 'bad' epoch",
-            action="store_true",
-            default=True
-        )
-        cli.add_argument(
-            "--decay_learning_rate",
-            help="Decay learning rate if more than one 'bad' epoch",
-            action="store_true",
-            default=False
-        )
-        cli.add_argument(
-            "--dice_smooth",
-            help="Smoothing factor to put in num/denom of dice coeff",
-            type=float,
-            default=1
-        )
-        cli.add_argument(
-            "--bce_alpha",
-            help="Weight for positive instances in binary x-entropy",
-            type=float,
-            default=3
-        )
-        cli.add_argument(
-            "--loss_function",
-            help="Loss function to use during training",
-            type=str,
-            default="weighted_crossentropy"
-        ) 
+
+    def parse_cli(self):
         # Load CLI args into namespace
-        cli.parse_args(namespace=self)
+        self.cli.parse_args(namespace=self)
         # Load/calculate various training parameters
         self.load_data()
         # Set trackers
@@ -142,13 +96,14 @@ class TrainHelper():
         self.metrics_file = self.out_dir+self.tag+"_metrics.pickle"
         # Initialize results object, written at end of training
         self.summary = {
-            "train_params": vars(cli.parse_args()),
+            "train_params": vars(self.cli.parse_args()),
             "model_config": {}, # set by self.train
             "patients_test": [],
             "random_seeds": []
         }
         self.summary["train_params"]["input_shape"] = self.input_shape
         self.summary_file = self.out_dir+self.tag+"_summary.json"
+        return
 
     def load_data(self):
         """
@@ -208,7 +163,9 @@ class TrainHelper():
         self.summary["model_config"] = model_config
         self.model = model
         # Set up directories
-        self.organize()
+        organized = self.organize()
+        if not organized:
+            return
         # Run training
         if self.n_trainings > 1:
             # One process running several trainings
@@ -233,7 +190,7 @@ class TrainHelper():
             raise TypeError
         df_row = {"random_seed": self.random_seed}
         for key, value in epoch_metrics.items():
-            if type(value) == list:
+            if type(value) == list and len(value) == 1:
                 df_row[key] = value[0]
             else:
                 df_row[key] = value
