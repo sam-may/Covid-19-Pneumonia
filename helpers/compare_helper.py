@@ -75,9 +75,18 @@ class CompareHelper():
                 plot_func()
                 # Comparison plot
                 plot_func(fig=common_fig)
-
-            common_fig.savefig(self.out_dir+plot_name)
+            # Check to see if a comparison was plotted
+            no_common_plot = True
+            common_axes = common_fig.axes
+            for axes in common_axes:
+                if axes.lines or axes.collections or axes.patches:
+                    no_common_plot = False
+            if not no_common_plot:
+                common_fig.savefig(self.out_dir+plot_name+".pdf")
+            # Cleanup
             plt.close(common_fig)
+
+        return
 
     def organize(self):
         # Create base directory
