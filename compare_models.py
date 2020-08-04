@@ -1,3 +1,4 @@
+import os
 import numpy
 import matplotlib.pyplot as plt
 import plots
@@ -8,10 +9,11 @@ from models import loss_functions
 from generators.unet import DataGenerator2p5D
 
 class PlotHelper(ModelHelper):
-    def __init__(self, model, model_dir):
+    def __init__(self, model, model_dir, common_slices):
         super().__init__(model, model_dir)
         # Plot-specific attributes
         self.dice_scores = []
+        self.common_slices = common_slices
         # Choose first training cohort
         self.patients_test_0 = self.patients_test[0]
         self.metrics_df_0 = self.metrics_df[self.metrics_df.random_seed == 0]
@@ -26,9 +28,29 @@ class PlotHelper(ModelHelper):
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test_0,
-            batch_size=self.validation_batch_size
+            batch_size=self.validation_batch_size,
+            extra_slice_step=self.extra_slice_step
         )
         return
+
+    def plot_common_slices(self, fig=None):
+        is_individual_plot = (not fig)
+        if is_individual_plot and len(self.common_slices) > 0:
+            common_dir = self.plot_dir+"common/"
+            if not os.path.exists(common_dir):
+                os.mkdir(common_dir)
+            print("[MODEL_HELPER] Plotting common slice plots")
+            # Plot
+            for patient_slice_pair in self.common_slices:
+                patient, slice_idx = patient_slice_pair
+                # Explicit casting because numpy casts the tuple to strings
+                out_path = common_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx)
+                self.side_by_side_plot(
+                    patient=str(patient), 
+                    slice_idx=int(slice_idx), 
+                    out_path=out_path
+                )
+        return 
 
     def plot_micro_dice(self, fig=None):
         """Histograms of the scores for 70% of validation cases"""
@@ -80,6 +102,9 @@ class PlotHelper(ModelHelper):
             tag=self.tag
         )
         if is_individual_plot:
+            sample_dir = self.plot_dir+"samples/"
+            if not os.path.exists(sample_dir):
+                os.mkdir(sample_dir)
             print("[MODEL_HELPER] Plotting slice plots")
             dice_scores = numpy.array(dice_scores)
             patient_slice_pairs = numpy.array(patient_slice_pairs)
@@ -94,7 +119,11 @@ class PlotHelper(ModelHelper):
             # Plot
             for patient, slice_idx in assortment_of_pairs:
                 # Explicit casting because numpy casts the tuple to strings
-                self.side_by_side_plot(str(patient), int(slice_idx))
+                self.side_by_side_plot(
+                    patient=str(patient), 
+                    slice_idx=int(slice_idx),
+                    out_path=sample_dir
+                )
 
         return
 
@@ -104,8 +133,8 @@ class PlotHelper(ModelHelper):
         samples each of size n_batches*validation generator batch size
         """
 
-        n_jackknife = 2
-        n_batches = 3
+        n_jackknife = 4
+        n_batches = 6
         self.tprs = []
         self.fprs = []
         self.aucs = []
@@ -164,12 +193,12 @@ class PlotHelper(ModelHelper):
         plt.ylabel("1 - Dice Coefficient")
         plt.legend()
         if save:
-            plt.savefig(self.plot_dir+self.tag+"learning_curve.pdf")
+            plt.savefig(self.plot_dir+self.tag+"_learning_curve.pdf")
             plt.close(fig)
 
         return
 
-    def side_by_side_plot(self, patient=None, slice_idx=None): 
+    def side_by_side_plot(self, patient=None, slice_idx=None, out_path=None): 
         """
         Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
         """
@@ -192,11 +221,13 @@ class PlotHelper(ModelHelper):
         truth = truth.reshape([M, M])
         pred = pred.reshape([M, M])       
         # Plot
+        if not out_path:
+            out_path = self.plot_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx)
         plots.image_truth_pred_plot(
             image, 
             truth, 
             pred, 
-            self.plot_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx),
+            out_path,
             title="1 - Dice: %0.2f (%s, %d)" % (dice_score, patient, slice_idx)
         )
 
@@ -205,9 +236,30 @@ class PlotHelper(ModelHelper):
 if __name__ == "__main__":
     # Initialize comparison framework
     compare_helper = CompareHelper()
+    # Common slices to plot
+    common_slices = [
+        ("patient18", 154),
+        ("russia_patient_274", 14),
+        ("patient34", 197),
+        ("patient58", 154),
+        ("patient66", 257),
+        ("patient67", 112),
+        ("russia_patient_283", 15),
+        ("russia_patient_286", 16),
+        ("russia_patient_264", 14),
+        ("patient45", 56)
+    ]
     # Initialize plotting functions
-    model1_helper = PlotHelper(unet, "trained_models/2p5_0extra")
-    model2_helper = PlotHelper(unet, "trained_models/2p5_5extra")
+    model1_helper = PlotHelper(
+        unet, 
+        "trained_models/2p5_0extra", 
+        common_slices
+    )
+    model2_helper = PlotHelper(
+        unet, 
+        "trained_models/2p5_5extra",
+        common_slices
+    )
     # Add to comparisons list
     compare_helper.add_model(model1_helper)
     compare_helper.add_model(model2_helper)
