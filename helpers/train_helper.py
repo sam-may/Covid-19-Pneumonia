@@ -163,7 +163,9 @@ class TrainHelper():
         self.summary["model_config"] = model_config
         self.model = model
         # Set up directories
-        self.organize()
+        organized = self.organize()
+        if not organized:
+            return
         # Run training
         if self.n_trainings > 1:
             # One process running several trainings

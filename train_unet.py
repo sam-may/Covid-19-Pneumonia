@@ -2,7 +2,7 @@ import numpy
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from models.unet import unet2p5D as unet
-from generators import DataGenerator2p5D
+from generators.unet import DataGenerator2p5D
 from plots import calc_auc
 
 class UNETHelper(TrainHelper):
@@ -13,6 +13,12 @@ class UNETHelper(TrainHelper):
             help="extra slices above and below input", 
             type=int, 
             default=0
+        )
+        self.cli.add_argument(
+            "--extra_slice_step", 
+            help="Steps between extra slices", 
+            type=int, 
+            default=1
         )
         self.cli.add_argument(
             "--delta",
@@ -72,14 +78,16 @@ class UNETHelper(TrainHelper):
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
-            batch_size=self.training_batch_size
+            batch_size=self.training_batch_size,
+            extra_slice_step=self.extra_slice_step
         )
         validation_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
-            batch_size=self.validation_batch_size
+            batch_size=self.validation_batch_size,
+            extra_slice_step=self.extra_slice_step
         )
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)

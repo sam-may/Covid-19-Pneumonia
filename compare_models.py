@@ -5,7 +5,7 @@ from helpers.compare_helper import CompareHelper
 from helpers.model_helper import ModelHelper
 from models.unet import unet2p5D as unet
 from models import loss_functions
-from generators import DataGenerator2p5D
+from generators.unet import DataGenerator2p5D
 
 class PlotHelper(ModelHelper):
     def __init__(self, model, model_dir):
