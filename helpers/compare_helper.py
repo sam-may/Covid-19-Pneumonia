@@ -4,6 +4,7 @@ import glob
 import h5py
 import matplotlib.pyplot as plt
 from datetime import datetime as dt
+from .print_helper import print
 
 class CompareHelper():
     def __init__(self):
@@ -27,16 +28,16 @@ class CompareHelper():
             with open(self.metadata_json, "r") as f_in:
                 self.metadata = json.load(f_in)
         elif self.data_hdf5 != model_helper.data_hdf5:
-            print("[COMPARE_HELPER] Model %s was trained on a different dataset"
+            print("Model %s was trained on a different dataset"
                   % model_helper.tag)
-            print("[COMPARE_HELPER] --> skipping")
+            print("--> skipping")
             return
         elif model_helper.tag in self.model_tags:
-            print("[COMPARE_HELPER] Model %s already loaded" % model_helper.tag)
-            print("[COMPARE_HELPER] --> skipping")
+            print("Model %s already loaded" % model_helper.tag)
+            print("--> skipping")
             return
         # Store model
-        print("[COMPARE_HELPER] Loaded model %s" % model_helper.tag)
+        print("Loaded model %s" % model_helper.tag)
         model_helper.assign_data(self.data, self.metadata)
         self.model_helpers.append(model_helper)
         self.model_tags.append(model_helper.tag)
@@ -53,10 +54,10 @@ class CompareHelper():
         self.organize()
         # Check for models
         if not self.model_helpers:
-            print("[COMPARE_HELPER] No models loaded")
+            print("No models loaded")
             return
         else:
-            print("[COMPARE_HELPER] Comparing loaded models")
+            print("Comparing loaded models")
         # Get list of plotting functions
         plot_func_names = []
         model_helper_class = type(self.model_helpers[0])
@@ -66,7 +67,7 @@ class CompareHelper():
                 plot_func_names.append(name)
         # Loop over models, make individual plots
         for name in plot_func_names:
-            print("[COMPARE_HELPER] Running "+name)
+            print("Running "+name)
             plot_name = name.split("plot_")[-1]
             common_fig, _ = plt.subplots()
             for i, model_helper in enumerate(self.model_helpers):

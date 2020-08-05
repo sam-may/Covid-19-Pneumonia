@@ -5,6 +5,7 @@ import glob
 import h5py
 import json
 import random
+from ..print_helper import print
 from . import utils
 
 
@@ -37,7 +38,7 @@ class DataHelper():
                            + "_downsample%d/" % self.downsample)
 
         if os.path.exists(self.output_dir):
-            print("[DATA_HELPER] Cleaning old contents in directory: %s" 
+            print("Cleaning old contents in directory: %s" 
                   % self.output_dir)
             os.system("rm -rf %s" % self.output_dir)
 
@@ -69,11 +70,11 @@ class DataHelper():
         n_patients = len(self.patients.keys())
         for patient, data in self.patients.items():
             ctr += 1
-            print("[DATA_HELPER] On patient %d out of %d (%.1f%%)" 
+            print("On patient %d out of %d (%.1f%%)" 
                   % (ctr, n_patients, (100.*float(ctr))/float(n_patients)))
             
             if os.path.exists(self.output_file(patient)):
-                print("[DATA_HELPER] File %s already exists, continuing." 
+                print("File %s already exists, continuing." 
                       % self.output_file(patient)) 
                 continue
             self.load_data(patient)
@@ -122,28 +123,28 @@ class DataHelper():
 
         else: # wuhan format
             for subdir in self.patients[patient]["inputs"]:
-                print("[DATA_HELPER] Extracting data from directory %s" 
+                print("Extracting data from directory %s" 
                       % subdir)
                 X = utils.load_dcms(glob.glob(subdir + "/*.dcm"))
                 y = utils.load_nii(subdir + "/ct_mask_covid_edited.nii")
                 if X is None or y is None:
-                    print("[DATA_HELPER] Did not load features or labels from \
+                    print("Did not load features or labels from \
                            directory %s, skipping." % subdir)
                     continue
                 if X.shape != y.shape:
-                    print("[DATA_HELPER] Input features have shape %s but label \
+                    print("Input features have shape %s but label \
                            has shape %s -- please check!" 
                           % (str(X.shape), str(y.shape)))
                     #sys.exit(1)
                     continue
                 if X.shape[1] < self.min_size:
-                    print("[DATA_HELPER] Images are assumed to be at least \
+                    print("Images are assumed to be at least \
                            %d x %d pixels, but this image is %d x %d pixels \
                            -- please check!" 
                            % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
                     continue
                 elif X.shape[1] > self.min_size:
-                    print("[DATA_HELPER] Images are assumed to be as small as \
+                    print("Images are assumed to be as small as \
                            %d x %d pixels, and this image is %d x %d pixels, \
                            so we resize it down to be compatible with the rest." 
                           % (self.min_size, self.min_size, X.shape[1], X.shape[1]))
@@ -200,13 +201,13 @@ class DataHelper():
 
     def preprocess(self, patient):
         if self.preprocess_method == "none":
-            print("[DATA_HELPER] Not applying any preprocessing scheme")
+            print("Not applying any preprocessing scheme")
             return
         elif self.preprocess_method == "z_score":
-            print("[DATA_HELPER] Applying z score transform to hounsfeld units")
+            print("Applying z score transform to hounsfeld units")
             self.z_score(patient)
         else:
-            print("[DATA_HELPER] Preprocessing method %s is not supported" 
+            print("Preprocessing method %s is not supported" 
                   % self.preprocess_method)
             sys.exit(1)
 
@@ -214,7 +215,7 @@ class DataHelper():
         if not ("mean" in self.metadata["preprocess_scheme"].keys() 
                 or "std" in self.metadata["preprocess_scheme"].keys()):
             mean, std = self.calculate_mean_and_std()
-            print("[DATA_HELPER] Mean: %.3f, Std dev: %.3f" % (mean, std))
+            print("Mean: %.3f, Std dev: %.3f" % (mean, std))
             self.metadata["preprocess_scheme"]["mean"] = mean
             self.metadata["preprocess_scheme"]["std"] = std
         

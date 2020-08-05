@@ -5,6 +5,7 @@ import pandas
 import h5py
 import random
 import json
+from .print_helper import print
 
 class TrainHelper():
     """
@@ -135,7 +136,7 @@ class TrainHelper():
                 pneumonia_pixels += float(entry["n_pneumonia"])
                 all_pixels += float(n_pixels**2)
         self.pneumonia_fraction = pneumonia_pixels/all_pixels
-        print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
+        print("Fraction of pixels with pneumonia: %.6f" 
               % self.pneumonia_fraction)
         return
 
@@ -199,13 +200,13 @@ class TrainHelper():
 
     def organize(self):
         """Set up directory structure where model is to be saved"""
-        print("[TRAIN_HELPER] Writing output files to "+self.out_dir)
+        print("Writing output files to "+self.out_dir)
         if not os.path.isdir("trained_models"):
             os.mkdir("trained_models")
         if os.path.isfile(self.summary_file):
-            print("[TRAIN_HELPER] Model with this tag already trained")
-            print("[TRAIN_HELPER] --> check or delete "+self.out_dir)
-            print("[TRAIN_HELPER] --> aborting training")
+            print("Model with this tag already trained")
+            print("--> check or delete "+self.out_dir)
+            print("--> aborting training")
             return False
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir)
@@ -221,7 +222,7 @@ class TrainHelper():
         Calculate additional performance metrics of final model and write 
         summary and metrics files
         """
-        print("[TRAIN_HELPER] Saving summary and additional metrics")
+        print("Saving summary and additional metrics")
         # Write summary to json
         with open(self.summary_file, "w") as f_out:
             json.dump(self.summary, f_out, indent=4, sort_keys=True)
