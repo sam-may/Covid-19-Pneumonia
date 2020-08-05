@@ -16,7 +16,7 @@ request_memory = 1 GB
 requirements = OSGVO_OS_STRING == "RHEL 7" && Arch == "X86_64" && HAS_MODULES == True
 
 # Singularity image to use
-+SingularityImage = "/cvmfs/singularity.opensciencegrid.org/opensciencegrid/tensorflow-gpu:2.2-cuda-10.1"
++SingularityImage = "/cvmfs/singularity.opensciencegrid.org/sjmay/zephyr:latest"
 
 # EXECUTABLE is the program your job will run It's often useful
 # to create a shell script to "wrap" your actual work.
@@ -24,7 +24,7 @@ Executable = executable.sh
 Arguments = 
 
 # inputs/outputs
-transfer_input_files = test.py
+transfer_input_files = package.tar.gz
 transfer_output_files = 
 
 # ERROR and OUTPUT are the error and output channels from your job
