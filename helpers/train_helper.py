@@ -2,7 +2,6 @@ import os
 import argparse
 import numpy
 import pandas
-import h5py
 import random
 import json
 from .print_helper import print
