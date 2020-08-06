@@ -9,7 +9,7 @@ from helpers.print_helper import print
 from helpers import utils
 
 
-class PrepHelper():
+class CovidPrepper():
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
@@ -279,11 +279,11 @@ if __name__ == "__main__":
     input_dir_wuhan = "/public/smay/covid_ct_data/wuhan/"
     input_dir_russia = "/public/smay/covid_ct_data/russia/"
 
-    helper = data_helper.DataHelper(
+    prepper = CovidPrepper(
         input_dir_wuhan = input_dir_wuhan,
         input_dir_russia = input_dir_russia,
         tag = args.tag,
         downsample  = args.downsample,
     )
 
-    helper.prep()
+    prepper.prep()
