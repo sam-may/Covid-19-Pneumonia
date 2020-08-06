@@ -70,6 +70,38 @@ class UNETHelper(TrainHelper):
         ) 
         self.parse_cli()
 
+    def load_data(self):
+        """
+        Load input hdf5 file and metadata json, interpret and set attributes 
+        listed below:
+
+        self.data
+        self.metadata
+        self.patients
+        self.input_shape
+        self.pneumonia_fraction
+        """
+        self.data = h5py.File(self.data_hdf5, "r") 
+        with open(self.metadata_json, "r") as f_in:
+            self.metadata = json.load(f_in)
+        # Get list of patients 
+        self.patients = [k for k in self.metadata.keys() if "patient" in k]
+        # Derive/store input shape
+        X_ = numpy.array(self.data[self.patients[0]+"_X_0"])
+        n_pixels = X_.shape[0]
+        self.input_shape = (X_.shape[0], X_.shape[1], 2*self.n_extra_slices+1)
+        # Calculate pneumonia imbalance
+        pneumonia_pixels = 0
+        all_pixels = 0
+        for patient in self.patients:
+            for entry in self.metadata[patient]:
+                pneumonia_pixels += float(entry["n_pneumonia"])
+                all_pixels += float(n_pixels**2)
+        self.pneumonia_fraction = pneumonia_pixels/all_pixels
+        print("Fraction of pixels with pneumonia: %.6f" 
+              % self.pneumonia_fraction)
+        return
+
     def train(self):
         """Train model with early stopping"""
         # Initialize data generators
