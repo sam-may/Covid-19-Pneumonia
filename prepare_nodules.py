@@ -18,6 +18,10 @@ class NodulesPrepper():
         self.output_data = h5py.File(output_hdf5, "w")
 
     def get_annotations(self, ct_scan, patient):
+        """
+        Isolate annotated lung nodule within a given bounding volume, then 
+        save to hdf5 file
+        """
         ct_scan = np.array(ct_scan)
         ct_scan = ct_scan[:,:,:,0]
         # Get COM of nodule to the nearest pixel
