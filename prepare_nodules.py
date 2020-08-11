@@ -7,40 +7,66 @@ import matplotlib.pyplot as plt
 from helpers.print_helper import print
 
 class NodulesPrepper():
-    def __init__(self, input_hdf5, output_hdf5="", 
-                 bounding_volume_shape=(64,64,16), patient_regex=""):
-        self.input_hdf5 = input_hdf5
-        self.input_dir = os.path.dirname(input_hdf5)+"/"
-        self.bounding_volume_shape = bounding_volume_shape
+    def __init__(self, bounding_volume=(64,64,16), patient_regex=""):
+        cli = argparse.ArgumentParser()
+        cli.add_argument(
+            "--mask_hdf5", 
+            help="path to annotated CT scan hdf5 file", 
+            type=str, 
+            default=""
+        )
+        cli.add_argument(
+            "--scan_hdf5", 
+            help="path to CT scan hdf5 file", 
+            type=str, 
+            default=""
+        )
+        cli.add_argument(
+            "--output_hdf5", 
+            help="(optional) path to output hdf5 file", 
+            type=str, 
+            default=""
+        )
+        # Load CLI args into namespace
+        cli.parse_args(namespace=self)
+        self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
+        # Load kwargs
+        self.bounding_volume = bounding_volume
         self.patient_regex = patient_regex
-        if not output_hdf5:
-            output_hdf5 = self.input_dir+"features.hdf5"
-        self.output_data = h5py.File(output_hdf5, "w")
+        # Open HDF5 files
+        self.scan_data = h5py.File(self.scan_hdf5, "r")
+        self.mask_data = h5py.File(self.mask_hdf5, "r")
+        if not self.output_hdf5:
+            self.output_hdf5 = self.input_dir+"features.hdf5"
+        self.output_data = h5py.File(self.output_hdf5, "w")
 
-    def get_annotations(self, ct_scan, patient):
+    def process_patient(self, patient):
         """
-        Isolate annotated lung nodule within a given bounding volume, then 
-        save to hdf5 file
+        Isolate annotated lung nodule within a given bounding volume, return 
+        save multichannel volume (scan, mask)
         """
-        ct_scan = np.array(ct_scan)
-        ct_scan = ct_scan[:,:,:,0]
+        # Load scan h5py dataset object
+        ct_scan = self.scan_data.get(patient)
+        # Load mask directly to memory
+        ct_mask = np.array(self.mask_data.get(patient))
+        ct_mask = ct_mask[:,:,:,0]
         # Get COM of nodule to the nearest pixel
-        x, y, z = np.nonzero(ct_scan)
-        M = float(np.sum(ct_scan)) # 'mass' of nodule
+        M = float(np.sum(ct_mask)) # 'mass' of nodule
         if M == 0:
             print("No annotations for patient %s" % patient)
             print("--> skipping")
             return
-        x_COM = np.sum(x*ct_scan[(x, y, z)])/M
-        y_COM = np.sum(y*ct_scan[(x, y, z)])/M
-        z_COM = np.sum(z*ct_scan[(x, y, z)])/M
+        x, y, z = np.nonzero(ct_mask)
+        x_COM = np.sum(x*ct_mask[(x, y, z)])/M
+        y_COM = np.sum(y*ct_mask[(x, y, z)])/M
+        z_COM = np.sum(z*ct_mask[(x, y, z)])/M
         # Round to nearest pixel
         x_COM = int(round(x_COM))
         y_COM = int(round(y_COM))
         z_COM = int(round(z_COM))
-        # Capture nodule
-        bound_x, bound_y, bound_z = self.bounding_volume_shape
-        scan_x, scan_y, scan_z = ct_scan.shape
+        # Get bounding volume edges
+        bound_x, bound_y, bound_z = self.bounding_volume
+        scan_x, scan_y, scan_z = ct_mask.shape
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
         y_ = y_COM - bound_y//2
@@ -57,44 +83,41 @@ class NodulesPrepper():
             print("--> skipping")
             return
         # Fill bounding volume
-        bound_volume = ct_scan[x_:_x,y_:_y,z_:_z]
-        # Write to output hdf5 file
-        self.output_data.create_dataset(patient, data=bound_volume)
-        return
+        bound_mask = ct_mask[x_:_x,y_:_y,z_:_z]
+        bound_scan = ct_scan[x_:_x,y_:_y,z_:_z]
+        bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
+        return bound_stack
 
     def process(self):
-        # Load dataset
-        print("Loading data")
-        input_data = h5py.File(self.input_hdf5, "r")
+        """Process data for all patients in annotated dataset"""
+        print("Loading patients")
         pattern = re.compile(self.patient_regex)
-        patients = [k for k in list(input_data.keys()) if pattern.match(k)]
+        patients = [k for k in list(self.mask_data.keys()) if pattern.match(k)]
+        masks_in_scans = np.isin(patients, list(self.scan_data.keys()))
+        if not np.all(masks_in_scans):
+            print("The following patients in %s have no counterpart in %s:" 
+                  % (self.mask_hdf5, self.scan_hdf5))
+            patients = np.array(patients)
+            for patient in patients[~masks_in_scans]:
+                print("  - %s" % patient)
+            print("--> skipping the patients listed above")
+            patients = list(patients[masks_in_scans])
         print("Parsing patients")
         # Run annotation search
         for patient in patients:
             print("Processing {}".format(patient))
-            self.get_annotations(input_data.get(patient), patient)
-        print("Writing to disk")
+            bound_stack = self.process_patient(patient)
+            # Write to output hdf5 file
+            self.output_data.create_dataset(patient, data=bound_stack)
+        print("Wrapping up")
+        self.scan_data.close()
+        self.mask_data.close()
         self.output_data.close()
         return
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-i", "--input_hdf5", 
-        help="path to input hdf5 file", 
-        type=str, 
-        default="")
-    parser.add_argument(
-        "--output_hdf5", 
-        help="(optional) path to output hdf5 file", 
-        type=str, 
-        default="")
-    args = parser.parse_args()
-
     prepper = NodulesPrepper(
-        input_hdf5 = args.input_hdf5,
-        output_hdf5 = args.output_hdf5,
-        bounding_volume_shape=(64,64,32),
+        bounding_volume=(64,64,32),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
 
