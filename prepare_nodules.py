@@ -1,6 +1,7 @@
 import os
 import re
 import h5py
+import json
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,13 +33,35 @@ class NodulesPrepper():
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
         # Load kwargs
         self.bounding_volume = bounding_volume
-        self.patient_regex = patient_regex
+        self.pattern = re.compile(patient_regex)
         # Open HDF5 files
         self.scan_data = h5py.File(self.scan_hdf5, "r")
         self.mask_data = h5py.File(self.mask_hdf5, "r")
+        self.patients = [k for k in list(self.mask_data.keys()) 
+                         if self.pattern.match(k)]
         if not self.output_hdf5:
-            self.output_hdf5 = self.input_dir+"features.hdf5"
+            self.output_dir = self.input_dir
+        else:
+            self.output_dir = os.path.dirname(self.output_hdf5)
+            if self.output_dir != "":
+                self.output_dir += "/"
+        self.output_hdf5 = self.output_dir+"features.hdf5"
+        self.metadata_json = self.output_dir+"metadata.json"
         self.output_data = h5py.File(self.output_hdf5, "w")
+        self.metadata = {}
+
+    def add_metadata(self, patient, patient_metadata):
+        if patient in self.metadata.keys():
+            self.metadata[patient].update(patient_metadata)
+        else:
+            self.metadata[patient] = patient_metadata
+        return
+
+    def write_metadata(self):
+        print("Writing metadata to %s" % self.metadata_json)
+        with open(self.metadata_json, "w") as f_out:
+            json.dump(self.metadata, f_out, indent=4)
+        return
 
     def process_patient(self, patient):
         """
@@ -86,39 +109,90 @@ class NodulesPrepper():
         bound_mask = ct_mask[x_:_x,y_:_y,z_:_z]
         bound_scan = ct_scan[x_:_x,y_:_y,z_:_z]
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
+        # Volumetric metadata
+        bound_M = float(np.sum(bound_mask))
+        bound_volume = float(bound_x*bound_y*bound_z)
+        fraction_filled = np.sum(bound_mask > 0)/(bound_volume)
+        patient_metadata = {
+            "center_of_mass": [x_COM, y_COM, z_COM],
+            "fraction_filled": fraction_filled,
+            "exceeds_volume": int(M > bound_M)
+        }
+        self.add_metadata(patient, patient_metadata)
         return bound_stack
 
     def process(self):
         """Process data for all patients in annotated dataset"""
         print("Loading patients")
-        pattern = re.compile(self.patient_regex)
-        patients = [k for k in list(self.mask_data.keys()) if pattern.match(k)]
-        masks_in_scans = np.isin(patients, list(self.scan_data.keys()))
+        masks_in_scans = np.isin(self.patients, list(self.scan_data.keys()))
         if not np.all(masks_in_scans):
             print("The following patients in %s have no counterpart in %s:" 
                   % (self.mask_hdf5, self.scan_hdf5))
-            patients = np.array(patients)
-            for patient in patients[~masks_in_scans]:
+            self.patients = np.array(self.patients)
+            for patient in self.patients[~masks_in_scans]:
                 print("  - %s" % patient)
             print("--> skipping the patients listed above")
-            patients = list(patients[masks_in_scans])
+            self.patients = list(self.patients[masks_in_scans])
         print("Parsing patients")
         # Run annotation search
-        for patient in patients:
+        for patient in self.patients:
             print("Processing {}".format(patient))
             bound_stack = self.process_patient(patient)
             # Write to output hdf5 file
-            self.output_data.create_dataset(patient, data=bound_stack)
+            if np.any(bound_stack):
+                self.output_data.create_dataset(patient, data=bound_stack)
         print("Wrapping up")
         self.scan_data.close()
         self.mask_data.close()
         self.output_data.close()
+        self.write_metadata()
         return
+
+    def add_labels(self, benign_txt, scc_txt, adeno_txt):
+        """Add biopsy labels to patient metadata"""
+        # Get labels
+        print("Loading labels")
+        benign = []
+        with open(benign_txt) as f_in:
+            for line in f_in.readlines():
+                benign.append(line.split("\n")[0])
+        scc = []
+        with open(scc_txt) as f_in:
+            for line in f_in.readlines():
+                scc.append(line.split("\n")[0])
+        adeno = []
+        with open(adeno_txt) as f_in:
+            for line in f_in.readlines():
+                adeno.append(line.split("\n")[0])
+        # Get unique list of labeled patients
+        labeled_patients = list(set(benign+scc+adeno))
+        # Fill metadata
+        for patient_id in self.patients:
+            patient_metadata = {}
+            patient = patient_id.split("_ser_")[0]
+            if patient not in labeled_patients:
+                print("%s not in labeled patients" % patient)
+                print("--> skipping")
+                continue
+            patient_metadata["benign"] = int(patient in benign)
+            patient_metadata["malignant"] = int(not patient in benign)
+            # Squamous cell carcinoma (malignant)
+            patient_metadata["scc"] = int(patient in scc)
+            # Adenocarcinoma (malignant)
+            patient_metadata["adeno"] = int(patient in adeno)
+            # Save to metadata
+            self.add_metadata(patient_id, patient_metadata)
 
 if __name__ == "__main__":
     prepper = NodulesPrepper(
         bounding_volume=(64,64,32),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
-
+    # Run data pre-processing
     prepper.process()
+    prepper.add_labels(
+        benign_txt="benign.txt",
+        scc_txt="malignant-SCC.txt",
+        adeno_txt="malignant-adeno.txt"
+    )
+    prepper.write_metadata()
