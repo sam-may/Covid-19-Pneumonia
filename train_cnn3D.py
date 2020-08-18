@@ -4,25 +4,13 @@ import numpy
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from helpers.print_helper import print
-from models.unet import unet2p5D as unet
-from generators.unet import DataGenerator2p5D
+from models.cnn import cnn3D as cnn
+from generators.cnn import DataGenerator3D
 from plots import calc_auc
 
-class UNETHelper(TrainHelper):
+class CNNHelper(TrainHelper):
     def __init__(self):
         super().__init__()
-        self.cli.add_argument(
-            "--n_extra_slices", 
-            help="extra slices above and below input", 
-            type=int, 
-            default=0
-        )
-        self.cli.add_argument(
-            "--extra_slice_step", 
-            help="Steps between extra slices", 
-            type=int, 
-            default=1
-        )
         self.cli.add_argument(
             "--delta",
             help="Percent by which loss must improve",
@@ -82,47 +70,32 @@ class UNETHelper(TrainHelper):
         self.metadata
         self.patients
         self.input_shape
-        self.pneumonia_fraction
         """
         self.data = h5py.File(self.data_hdf5, "r") 
         with open(self.metadata_json, "r") as f_in:
             self.metadata = json.load(f_in)
         # Get list of patients 
-        self.patients = [k for k in self.metadata.keys() if "patient" in k]
+        self.patients = list(self.data.keys())
         # Derive/store input shape
-        X_ = numpy.array(self.data[self.patients[0]+"_X_0"])
-        n_pixels = X_.shape[0]
-        self.input_shape = (X_.shape[0], X_.shape[1], 2*self.n_extra_slices+1)
-        # Calculate pneumonia imbalance
-        pneumonia_pixels = 0
-        all_pixels = 0
-        for patient in self.patients:
-            for entry in self.metadata[patient]:
-                pneumonia_pixels += float(entry["n_pneumonia"])
-                all_pixels += float(n_pixels**2)
-        self.pneumonia_fraction = pneumonia_pixels/all_pixels
-        print("Fraction of pixels with pneumonia: %.6f" 
-              % self.pneumonia_fraction)
+        self.input_shape = self.data[self.patients[0]].shape
         return
 
     def train(self):
         """Train model with early stopping"""
         # Initialize data generators
-        training_generator = DataGenerator2p5D(
+        training_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=self.training_batch_size,
-            extra_slice_step=self.extra_slice_step
         )
-        validation_generator = DataGenerator2p5D(
+        validation_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
             batch_size=self.validation_batch_size,
-            extra_slice_step=self.extra_slice_step
         )
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
@@ -205,21 +178,17 @@ class UNETHelper(TrainHelper):
 
 if __name__ == "__main__":
     # Initialize helper
-    unet_helper = UNETHelper()
+    cnn_helper = CNNHelper()
     # Initialize model
-    unet_config = {
-        "input_shape": unet_helper.input_shape,
-        "n_filters": 12,
-        "n_layers_conv": 2,
-        "n_layers_unet": 3,
-        "kernel_size": (4, 4),
-        "dropout": 0.0,
+    cnn3D_config = {
+        "input_shape": cnn_helper.input_shape,
+        "dropout": 0.25,
         "batch_norm": False,
         "learning_rate": 0.00005,
-        "bce_alpha": unet_helper.bce_alpha,
-        "dice_smooth": unet_helper.dice_smooth,
-        "loss_function": unet_helper.loss_function 
+        "bce_alpha": cnn_helper.bce_alpha,
+        "dice_smooth": cnn_helper.dice_smooth,
+        "loss_function": cnn_helper.loss_function 
     }
-    model = unet(unet_config)
+    model = cnn(cnn3D_config)
     # Train model
-    unet_helper.run_training(model, unet_config)
+    cnn_helper.run_training(model, cnn3D_config)

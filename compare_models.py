@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import plots
 from helpers.compare_helper import CompareHelper
 from helpers.model_helper import ModelHelper
+from helpers.print_helper import print
 from models.unet import unet2p5D as unet
 from models import loss_functions
 from generators.unet import DataGenerator2p5D
@@ -39,7 +40,7 @@ class PlotHelper(ModelHelper):
             common_dir = self.plot_dir+"common/"
             if not os.path.exists(common_dir):
                 os.mkdir(common_dir)
-            print("[MODEL_HELPER] Plotting common slice plots")
+            print("Plotting common slice plots")
             # Plot
             for patient_slice_pair in self.common_slices:
                 patient, slice_idx = patient_slice_pair
@@ -59,7 +60,7 @@ class PlotHelper(ModelHelper):
         dice_scores = self.dice_scores
         patient_slice_pairs = []
         if not dice_scores:
-            print("[MODEL_HELPER] Generating dice scores")
+            print("Generating dice scores")
             generator = self.data_generator
             for patient in self.patients_test_0:
                 n_slices = len(self.metadata[patient])
@@ -105,7 +106,7 @@ class PlotHelper(ModelHelper):
             sample_dir = self.plot_dir+"samples/"
             if not os.path.exists(sample_dir):
                 os.mkdir(sample_dir)
-            print("[MODEL_HELPER] Plotting slice plots")
+            print("Plotting slice plots")
             dice_scores = numpy.array(dice_scores)
             patient_slice_pairs = numpy.array(patient_slice_pairs)
             # Sort dice scores in ascending order
