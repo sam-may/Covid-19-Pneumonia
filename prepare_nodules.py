@@ -2,6 +2,7 @@ import os
 import re
 import h5py
 import json
+import random
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -49,6 +50,29 @@ class NodulesPrepper():
         self.metadata_json = self.output_dir+"metadata.json"
         self.output_data = h5py.File(self.output_hdf5, "w")
         self.metadata = {}
+        # Mean and std for z-score normalization
+        self.mean, self.std = self.calc_mean_and_std()
+
+    def calc_mean_and_std(self):
+        """Calculate mean and std dev of ALL pixels for z-score norm"""
+        print("Calculating mean and std of all pixels")
+        pixel_values = []
+        for patient in self.patients:
+            ct_scan = self.scan_data.get(patient)
+            # Get random slices from scan
+            for _ in range(5):
+                random_z = random.randint(0, ct_scan.shape[-1]-1)
+                ct_slice = ct_scan[:,:,random_z]
+                # Get all nonzero pixels
+                slice_pixels = ct_slice[np.nonzero(ct_slice)].flatten()
+                pixel_values = np.concatenate((pixel_values, slice_pixels))
+                # Arbitrary cap
+                if len(pixel_values) >= 10**6:
+                    break
+        mean = np.mean(pixel_values.astype(np.float64))
+        std = np.std(pixel_values.astype(np.float64))
+        print("Result: mean = %.3f, std = %.3f" % (mean, std))
+        return mean, std
 
     def add_metadata(self, patient, patient_metadata):
         if patient in self.metadata.keys():
@@ -107,7 +131,11 @@ class NodulesPrepper():
             return
         # Fill bounding volume
         bound_mask = ct_mask[x_:_x,y_:_y,z_:_z]
-        bound_scan = ct_scan[x_:_x,y_:_y,z_:_z]
+        bound_scan = ct_scan[x_:_x,y_:_y,z_:_z].astype(np.float64)
+        # Apply z-score norm to bound CT scan volume
+        bound_scan -= self.mean
+        bound_scan *= 1./self.std
+        # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
         # Volumetric metadata
         bound_M = float(np.sum(bound_mask))
