@@ -1,7 +1,7 @@
 import os
 import numpy
 import matplotlib.pyplot as plt
-import plots
+from plots import *
 from helpers.compare_helper import CompareHelper
 from helpers.model_helper import ModelHelper
 from helpers.print_helper import print
@@ -92,7 +92,7 @@ class PlotHelper(ModelHelper):
                         dice_scores.append(dice_score)
                         patient_slice_pairs.append((patient, slice_idx))
         # Plot
-        plots.hist_1D(
+        general.hist_1D(
             dice_scores, 
             numpy.linspace(0,1,21),
             self.plot_dir+self.tag+"_micro_dice.pdf",
@@ -154,7 +154,7 @@ class PlotHelper(ModelHelper):
             pred = numpy.array(pred)
             y = numpy.array(y)
             # Get false/true positive rates, AUC
-            fpr, tpr, auc = plots.calc_auc(y.flatten(), pred.flatten())
+            fpr, tpr, auc = utils.calc_auc(y.flatten(), pred.flatten())
             self.fprs.append(fpr)
             self.tprs.append(tpr)
             self.aucs.append(auc)
@@ -165,7 +165,7 @@ class PlotHelper(ModelHelper):
         fpr_std = numpy.std(self.fprs, axis=0)
         auc = numpy.mean(self.aucs)
         auc_std = numpy.std(self.aucs)
-        plots.roc_plot(
+        general.roc_plot(
             fpr_mean, 
             fpr_std, 
             tpr_mean, 
@@ -224,7 +224,7 @@ class PlotHelper(ModelHelper):
         # Plot
         if not out_path:
             out_path = self.plot_dir+self.tag+"_%s_%d.pdf" % (patient, slice_idx)
-        plots.image_truth_pred_plot(
+        slices.image_truth_pred_plot(
             image, 
             truth, 
             pred, 
