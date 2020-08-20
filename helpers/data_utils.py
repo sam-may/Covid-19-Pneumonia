@@ -5,6 +5,7 @@ import math
 import cv2
 import pydicom
 import nibabel
+from ..print_helper import print
 
 def load_dcms(dcm_files):
     """
@@ -25,7 +26,7 @@ def load_dcms(dcm_files):
             ct_slices.append(file_data)
         else:
             # skip scout views
-            print("[UTILS.PY] load_dcms: found slice that is a scout view (?)")
+            print("load_dcms: found slice that is a scout view (?)")
 
     ct_slices_ = []
 
@@ -70,11 +71,11 @@ def downsample_images(images, downsample, round=False):
 
     if (not is_power_of_two(n_pixels) or not is_power_of_two(downsample) 
         or not (n_pixels/downsample).is_integer()):
-        print("[UTILS.PY] Original image has %d pixels and you want to \
+        print("Original image has %d pixels and you want to \
                downsize to %d something isn't right." % (n_pixels, downsample))
         sys.exit(1)
 
-    print("[UTILS.PY] Original image has %d pixels, downsizing to %d pixels" 
+    print("Original image has %d pixels, downsizing to %d pixels" 
           % (n_pixels, downsample))
 
     downsampled_images = []

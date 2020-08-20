@@ -1,6 +1,7 @@
 import json
 import glob
 import pandas
+from .print_helper import print
 
 class ModelHelper():
     def __init__(self, model, model_dir):

@@ -2,9 +2,9 @@ import os
 import argparse
 import numpy
 import pandas
-import h5py
 import random
 import json
+from .print_helper import print
 
 class TrainHelper():
     """
@@ -91,7 +91,7 @@ class TrainHelper():
                              + "weights/"
                              + self.tag
                              + "_weights_{epoch:02d}.hdf5")
-        # Initialize metrics, these here are updated each epoch
+        # Initialize metrics
         self.metrics = []
         self.metrics_file = self.out_dir+self.tag+"_metrics.pickle"
         # Initialize results object, written at end of training
@@ -107,37 +107,15 @@ class TrainHelper():
 
     def load_data(self):
         """
-        Load input hdf5 file and metadata json, interpret and set attributes 
-        listed below:
+        Load all relevant data. MUST set the following attributes:
 
         self.data
-        self.metadata
         self.patients
         self.input_shape
-        self.pneumonia_fraction
-        self.patients_train
-        self.patients_test
+
+        MUST BE OVERWRITTEN
         """
-        self.data = h5py.File(self.data_hdf5, "r") 
-        with open(self.metadata_json, "r") as f_in:
-            self.metadata = json.load(f_in)
-        # Get list of patients 
-        self.patients = [k for k in self.metadata.keys() if "patient" in k]
-        # Derive/store input shape
-        X_ = numpy.array(self.data[self.patients[0]+"_X_0"])
-        n_pixels = X_.shape[0]
-        self.input_shape = (X_.shape[0], X_.shape[1], 2*self.n_extra_slices+1)
-        # Calculate pneumonia imbalance
-        pneumonia_pixels = 0
-        all_pixels = 0
-        for patient in self.patients:
-            for entry in self.metadata[patient]:
-                pneumonia_pixels += float(entry["n_pneumonia"])
-                all_pixels += float(n_pixels**2)
-        self.pneumonia_fraction = pneumonia_pixels/all_pixels
-        print("[TRAIN_HELPER] Fraction of pixels with pneumonia: %.6f" 
-              % self.pneumonia_fraction)
-        return
+        raise NotImplementedError
 
     def shuffle_patients(self, random_seed=0):
         # Calculate number of training/testing slices
@@ -154,7 +132,7 @@ class TrainHelper():
         return
 
     def train(self):
-        """Must be overwritten"""
+        """MUST BE OVERWRITTEN"""
         raise NotImplementedError
 
     def run_training(self, model, model_config):
@@ -199,13 +177,13 @@ class TrainHelper():
 
     def organize(self):
         """Set up directory structure where model is to be saved"""
-        print("[TRAIN_HELPER] Writing output files to "+self.out_dir)
+        print("Writing output files to "+self.out_dir)
         if not os.path.isdir("trained_models"):
             os.mkdir("trained_models")
         if os.path.isfile(self.summary_file):
-            print("[TRAIN_HELPER] Model with this tag already trained")
-            print("[TRAIN_HELPER] --> check or delete "+self.out_dir)
-            print("[TRAIN_HELPER] --> aborting training")
+            print("Model with this tag already trained")
+            print("--> check or delete "+self.out_dir)
+            print("--> aborting training")
             return False
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir)
@@ -221,7 +199,7 @@ class TrainHelper():
         Calculate additional performance metrics of final model and write 
         summary and metrics files
         """
-        print("[TRAIN_HELPER] Saving summary and additional metrics")
+        print("Saving summary and additional metrics")
         # Write summary to json
         with open(self.summary_file, "w") as f_out:
             json.dump(self.summary, f_out, indent=4, sort_keys=True)
