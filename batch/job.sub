@@ -5,7 +5,7 @@ Universe = vanilla
 Requirements = HAS_SINGULARITY == True
 request_cpus = 1
 request_gpus = 1
-request_memory = 1 GB
+request_memory = 4 GB
 #request_disk = 1 GB
 
 # Define project
@@ -21,11 +21,12 @@ requirements = OSGVO_OS_STRING == "RHEL 7" && Arch == "X86_64" && HAS_MODULES ==
 # EXECUTABLE is the program your job will run It's often useful
 # to create a shell script to "wrap" your actual work.
 Executable = executable.sh
-Arguments = 
+Arguments =  
 
 # inputs/outputs
 transfer_input_files = package.tar.gz
 transfer_output_files = 
+#transfer_output_files = trained_models/$TAG/$TAG_summary.json trained_models/$TAG/$TAG_metrics.pickle
 
 # ERROR and OUTPUT are the error and output channels from your job
 # that HTCondor returns from the remote host.
@@ -45,4 +46,3 @@ Log = outputs/$(Cluster).$(Process).log
 # QUEUE is the "start button" - it launches any jobs that have been
 # specified thus far.
 queue 1
-
