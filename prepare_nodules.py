@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from helpers.print_helper import print
 
 class NodulesPrepper():
-    def __init__(self, bounding_volume=(64,64,16), patient_regex=""):
+    def __init__(self, bounding_volume=(20,20,20), patient_regex=""):
         cli = argparse.ArgumentParser()
         cli.add_argument(
             "--mask_hdf5", 
@@ -20,6 +20,12 @@ class NodulesPrepper():
         cli.add_argument(
             "--scan_hdf5", 
             help="path to CT scan hdf5 file", 
+            type=str, 
+            default=""
+        )
+        cli.add_argument(
+            "--dicom_json", 
+            help="path to processed JSON dump of DICOM file for CT scans", 
             type=str, 
             default=""
         )
@@ -50,6 +56,9 @@ class NodulesPrepper():
         self.metadata_json = self.output_dir+"metadata.json"
         self.output_data = h5py.File(self.output_hdf5, "w")
         self.metadata = {}
+        # Open DICOM JSON
+        with open(self.dicom_json, "r") as f_in:
+            self.dicom_data = json.load(f_in)
         # Mean and std for z-score normalization
         self.mean, self.std = self.calc_mean_and_std()
 
@@ -92,6 +101,22 @@ class NodulesPrepper():
         Isolate annotated lung nodule within a given bounding volume, return 
         save multichannel volume (scan, mask)
         """
+        # DICOM metadata
+        if patient not in self.dicom_data.keys():
+            print("No DICOM data for patient %s" % patient)
+            print("--> skipping")
+            return
+        patient_dicom = self.dicom_data[patient]
+        z_spacing = 1.0
+        if "SpacingBetweenSlices" in patient_dicom.keys():
+            z_spacing = patient_dicom["SpacingBetweenSlices"] # in mm
+        elif "SliceThickness" in patient_dicom.keys():
+            z_spacing = patient_dicom["SliceThickness"]/2.0 # in mm
+        else:
+            print("No slice thickness data for patient %s" % patient)
+            print("--> skipping")
+            return
+        x_spacing, y_spacing = patient_dicom["PixelSpacing"] # in mm
         # Load scan h5py dataset object
         ct_scan = self.scan_data.get(patient)
         # Load mask directly to memory
@@ -113,14 +138,19 @@ class NodulesPrepper():
         z_COM = int(round(z_COM))
         # Get bounding volume edges
         bound_x, bound_y, bound_z = self.bounding_volume
-        scan_x, scan_y, scan_z = ct_mask.shape
+        # Convert to pixel dimensions
+        bound_x = int(round(bound_x/x_spacing))
+        bound_y = int(round(bound_y/y_spacing))
+        bound_z = int(round(bound_z/z_spacing))
+        # Calculate bound volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
         y_ = y_COM - bound_y//2
         _y = y_COM + bound_y//2
         z_ = z_COM - bound_z//2
         _z = z_COM + bound_z//2
-        # Check boundaries
+        # Check scan boundaries
+        scan_x, scan_y, scan_z = ct_mask.shape
         if x_ < 0 or y_ < 0 or z_ < 0:
             print("Bounding box outside of CT volume")
             print("--> skipping")
@@ -139,13 +169,18 @@ class NodulesPrepper():
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
         # Volumetric metadata
         bound_M = float(np.sum(bound_mask))
-        bound_volume = float(bound_x*bound_y*bound_z)
-        fraction_filled = np.sum(bound_mask > 0)/(bound_volume)
+        nodule_volume = np.sum(ct_mask > 0)*x_spacing*y_spacing*z_spacing
         patient_metadata = {
-            "center_of_mass": [x_COM, y_COM, z_COM],
-            "fraction_filled": fraction_filled,
+            "center_of_mass": [
+                x_COM*x_spacing, 
+                y_COM*y_spacing, 
+                z_COM*z_spacing
+            ],
+            "nodule_volume": nodule_volume,
             "exceeds_volume": int(M > bound_M)
         }
+        if M < bound_M:
+            print("uh... what? this is %s" % patient)
         self.add_metadata(patient, patient_metadata)
         return bound_stack
 
@@ -213,7 +248,7 @@ class NodulesPrepper():
 
 if __name__ == "__main__":
     prepper = NodulesPrepper(
-        bounding_volume=(64,64,32),
+        bounding_volume=(40,40,20),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
     # Run data pre-processing
