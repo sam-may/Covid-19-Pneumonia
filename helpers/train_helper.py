@@ -90,7 +90,7 @@ class TrainHelper():
         self.weights_file = (self.out_dir
                              + "weights/"
                              + self.tag
-                             + "_weights_{epoch:02d}.hdf5")
+                             + "_weights_{epoch:02d}-{val_loss:.2f}.hdf5")
         # Initialize metrics
         self.metrics = []
         self.metrics_file = self.out_dir+self.tag+"_metrics.pickle"
