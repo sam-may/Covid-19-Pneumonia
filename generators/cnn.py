@@ -1,6 +1,7 @@
 import numpy
 import random
 import tensorflow.keras as keras
+from helpers.print_helper import print
 
 class DataGenerator3D(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
@@ -30,6 +31,9 @@ class DataGenerator3D(keras.utils.Sequence):
 
         return numpy.array(X), numpy.array(y)
 
+    def on_epoch_end(self):
+        self.cur_patient = 0
+
     def get_nodule(self, patient=None):
         """
         Retrieve a nodule (M,M,N) bounding volume and binary label
@@ -45,4 +49,3 @@ class DataGenerator3D(keras.utils.Sequence):
         y = self.metadata[patient]["malignant"]
 
         return X, y
-
