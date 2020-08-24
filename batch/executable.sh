@@ -27,15 +27,13 @@ cd zephyr
 echo "About to run stashcp"
 ls -atlrh
 
-# need to debug why these don't work
-python3 -m pip install --upgrade stashcp
+python3 -m pip install --upgrade stashcp # included in dockerfile, but needs to be run again for some reason
 stashcp /osgconnect/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.hdf5 .
 stashcp /osgconnect/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.json .
 echo "Finished running stashcp"
 ls -althr
 
-
-python3 train_unet.py --data_hdf5 "features.hdf5" --metadata_json "features.json" --max_epochs 1 --n_trainings 3
+python3 train_unet.py --data_hdf5 "features.hdf5" --metadata_json "features.json" --max_epochs 1 --n_trainings 1 --tag "test_condor"
 
 echo "Done training"
 ls -altrh

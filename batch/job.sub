@@ -25,7 +25,7 @@ Arguments =
 
 # inputs/outputs
 transfer_input_files = package.tar.gz
-transfer_output_files = 
+transfer_output_files = zephyr/trained_models 
 #transfer_output_files = trained_models/$TAG/$TAG_summary.json trained_models/$TAG/$TAG_metrics.pickle
 
 # ERROR and OUTPUT are the error and output channels from your job
