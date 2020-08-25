@@ -6,7 +6,7 @@ from helpers.train_helper import TrainHelper
 from helpers.print_helper import print
 from models.unet import unet2p5D as unet
 from generators.unet import DataGenerator2p5D
-from plots import calc_auc
+from plots.utils import calc_auc
 
 class UNETHelper(TrainHelper):
     def __init__(self):
@@ -140,7 +140,9 @@ class UNETHelper(TrainHelper):
                 training_generator,
                 callbacks=callbacks_list,
                 use_multiprocessing=False,
-                validation_data=validation_generator
+                validation_data=validation_generator,
+                epochs=epoch_num,
+                initial_epoch=epoch_num-1
             )
             # Calculate TPR, FPR, and AUC
             y = []
