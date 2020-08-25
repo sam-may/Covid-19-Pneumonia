@@ -1,11 +1,13 @@
 python train_cnn3D.py \
 --data_hdf5="/mnt/data/LungNodules/features.hdf5" \
 --metadata_json="/mnt/data/LungNodules/metadata.json" \
---tag="nodulesCNN3D_test" \
+--tag="nodulesCNN3D_extra-features_test" \
 --max_epochs=1 \
 --n_trainings=1 \
---training_batch_size=1 \
---validation_batch_size=1 \
---max_batch_size=4 \
+--training_batch_size=16 \
+--validation_batch_size=16 \
+--max_batch_size=64 \
 --random_seed=0 \
---train_frac=0.7
+--train_frac=0.7 \
+--loss_function="weighted_crossentropy" \
+--extra_features center_of_mass_norm nodule_volume_norm
