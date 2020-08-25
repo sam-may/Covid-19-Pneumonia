@@ -1,5 +1,5 @@
 #!/bin/bash
-
+unset PYTHONPATH
 
 echo
 echo
@@ -33,7 +33,7 @@ stashcp /osgconnect/public/smay/covid_ct_data/features/14Jul2020_z_score_downsam
 echo "Finished running stashcp"
 ls -althr
 
-python3 train_unet.py --data_hdf5 "features.hdf5" --metadata_json "features.json" --max_epochs 1 --n_trainings 1 --tag "test_condor"
+python3 train_unet.py --data_hdf5 "features.hdf5" --metadata_json "features.json" --max_epochs 10 --n_trainings 10 --tag "test_condor"
 
 echo "Done training"
-ls -altrh
+ls -altrh */*
