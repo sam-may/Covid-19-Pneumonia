@@ -4,6 +4,7 @@ from . import loss_functions
 def cnn3D(config, verbose=True):
     # Unpack config
     input_shape = config["input_shape"]
+    n_extra_features = config["n_extra_features"]
     dropout = config["dropout"]
     loss_hyperparams = { 
         "bce_alpha": config["bce_alpha"],
@@ -16,10 +17,15 @@ def cnn3D(config, verbose=True):
         shape=input_shape, 
         name="input_img"
     )
+    if n_extra_features > 0:
+        input_features = keras.layers.Input(
+            shape=(n_extra_features,), 
+            name="extra_features"
+        )
     # Construct CNN
     conv = keras.layers.Conv3D(
-        32, 
-        kernel_size=(5,5,5), 
+        2, 
+        kernel_size=(4,4,4), 
         kernel_initializer="uniform", 
         activation="relu", 
         name="conv_1"
@@ -33,7 +39,7 @@ def cnn3D(config, verbose=True):
         name="conv_dropout_1"
     )(conv)
     conv = keras.layers.Conv3D(
-        32, 
+        2, 
         kernel_size=(2,2,2), 
         kernel_initializer="uniform", 
         activation="relu", 
@@ -47,16 +53,32 @@ def cnn3D(config, verbose=True):
         dropout, 
         name="conv_dropout_2"
     )(conv)
-    conv = keras.layers.Flatten()(conv)
+    flat = keras.layers.Flatten()(conv)
+    # Add extra features to flattened layer
+    if n_extra_features > 0:
+        flat = keras.layers.concatenate([input_features, flat])
+    # Consolidate into a dense layer
+    dense = keras.layers.Dense(
+        100, 
+        activation="relu", 
+        kernel_initializer="lecun_uniform", 
+        name="dense_1"
+    )(flat)
     # Output layer
     output = keras.layers.Dense(
         1, 
         activation="sigmoid", 
         kernel_initializer="lecun_uniform", 
         name="output"
-    )(conv)
+    )(dense)
     # Put model together
-    model = keras.models.Model(inputs=[input_img], outputs=[output])
+    if n_extra_features > 0:
+        model = keras.models.Model(
+            inputs=[input_img, input_features], 
+            outputs=[output]
+        )
+    else:
+        model = keras.models.Model(inputs=[input_img], outputs=[output])
     optimizer = keras.optimizers.Adam()
     model.compile(
         optimizer=optimizer, 
