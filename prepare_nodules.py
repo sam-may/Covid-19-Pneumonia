@@ -138,10 +138,6 @@ class NodulesPrepper():
         z_COM = int(round(z_COM))
         # Get bounding volume edges
         bound_x, bound_y, bound_z = self.bounding_volume
-        # Convert to pixel dimensions
-        bound_x = int(round(bound_x/x_spacing))
-        bound_y = int(round(bound_y/y_spacing))
-        bound_z = int(round(bound_z/z_spacing))
         # Calculate bound volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
@@ -211,8 +207,11 @@ class NodulesPrepper():
         self.write_metadata()
         return
 
-    def add_labels(self, benign_txt, scc_txt, adeno_txt):
+    def add_labels(self, benign_txt, scc_txt, adeno_txt, existing_json=None):
         """Add biopsy labels to patient metadata"""
+        if existing_json:
+            with open(existing_json, "r") as f_in:
+                self.metadata = json.load(f_in)
         # Get labels
         print("Loading labels")
         benign = []
@@ -246,6 +245,50 @@ class NodulesPrepper():
             # Save to metadata
             self.add_metadata(patient_id, patient_metadata)
 
+        self.write_metadata()
+        return
+
+    def normalize_metadata(self, name, existing_json=None):
+        print("Adding normalized '%s' values" % name)
+        if existing_json:
+            with open(existing_json, "r") as f_in:
+                self.metadata = json.load(f_in)
+        # Get mean and std of metadata field
+        values = []
+        componentwise = False
+        for patient, data in self.metadata.items():
+            if name not in data.keys():
+                continue
+            if len(values) == 0:
+                componentwise = (len(np.array(data[name]).shape) == 1)
+            values.append(data[name])
+        values = np.array(values)
+        means = []
+        stds = []
+        if componentwise:
+            for c in range(values.shape[-1]):
+                means.append(np.mean(values[:,c]))
+                stds.append(np.std(values[:,c]))
+        else:
+            means.append(np.mean(values.flatten()))
+            stds.append(np.std(values.flatten()))
+        for i, mean in enumerate(means):
+            std = stds[i]
+            for patient, data in self.metadata.items():
+                if name not in data.keys():
+                    continue
+                if componentwise:
+                    new_data = (data[name][i] - mean)/std
+                    if i == 0:
+                        self.metadata[patient][name+"_norm"] = [new_data]
+                    else:
+                        self.metadata[patient][name+"_norm"].append(new_data)
+                else:
+                    self.metadata[patient][name+"_norm"] = (data[name] - mean)/std
+        self.write_metadata()
+        return
+            
+
 if __name__ == "__main__":
     prepper = NodulesPrepper(
         bounding_volume=(40,40,20),
@@ -258,4 +301,5 @@ if __name__ == "__main__":
         scc_txt="malignant-SCC.txt",
         adeno_txt="malignant-adeno.txt"
     )
-    prepper.write_metadata()
+    prepper.normalize_metadata("center_of_mass")
+    prepper.normalize_metadata("nodule_volume")
