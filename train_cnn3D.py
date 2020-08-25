@@ -1,12 +1,14 @@
 import h5py
 import json
 import numpy
+import pandas
+import matplotlib.pyplot as plt
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from helpers.print_helper import print
 from models.cnn import cnn3D as cnn
 from generators.cnn import DataGenerator3D
-from plots import calc_auc
+from plots.utils import calc_auc
 
 class CNNHelper(TrainHelper):
     def __init__(self):
@@ -49,7 +51,7 @@ class CNNHelper(TrainHelper):
         )
         self.cli.add_argument(
             "--loss_function",
-            help="Loss function to use during training",
+            help="Loss function to use for training (from models/loss_functions.py)",
             type=str,
             default="weighted_crossentropy"
         ) 
@@ -58,6 +60,12 @@ class CNNHelper(TrainHelper):
             help="Number of batches for calculating ROC metrics",
             type=int,
             default=3
+        ) 
+        self.cli.add_argument(
+            "--extra_features",
+            help="Space-separated list of extra features to pass to model",
+            type=str,
+            nargs="*"
         ) 
         self.parse_cli()
 
@@ -78,6 +86,15 @@ class CNNHelper(TrainHelper):
         self.patients = list(self.data.keys())
         # Derive/store input shape
         self.input_shape = self.data[self.patients[0]].shape
+        # Derive/store number of extra features
+        self.n_extra_features = 0
+        if self.extra_features:
+            for feature in self.extra_features:
+                f = self.metadata[self.patients[0]][feature]
+                if type(f) == list:
+                    self.n_extra_features += len(f)
+                else:
+                    self.n_extra_features += 1
         return
 
     def train(self):
@@ -89,6 +106,7 @@ class CNNHelper(TrainHelper):
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=self.training_batch_size,
+            extra_features=self.extra_features
         )
         validation_generator = DataGenerator3D(
             data=self.data,
@@ -96,6 +114,7 @@ class CNNHelper(TrainHelper):
             input_shape=self.input_shape,
             patients=self.patients_test,
             batch_size=self.validation_batch_size,
+            extra_features=self.extra_features
         )
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
@@ -113,7 +132,9 @@ class CNNHelper(TrainHelper):
                 training_generator,
                 callbacks=callbacks_list,
                 use_multiprocessing=False,
-                validation_data=validation_generator
+                validation_data=validation_generator,
+                epochs=epoch_num,
+                initial_epoch=epoch_num-1
             )
             # Calculate TPR, FPR, and AUC
             y = []
@@ -153,7 +174,7 @@ class CNNHelper(TrainHelper):
                 and bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
                 if self.training_batch_size*4 <= self.max_batch_size:
-                    print("--> Increasing batch size from %d -> %d" 
+                    print("--> increasing batch size from %d -> %d" 
                           % (self.training_batch_size, self.training_batch_size*4))
                     print("--> resetting bad epochs to 0")
                     print("--> continuing for another epoch")
@@ -162,9 +183,7 @@ class CNNHelper(TrainHelper):
                     bad_epochs = 0
             # Check for early stopping
             if bad_epochs >= self.early_stopping_rounds:
-                print("Number of early stopping rounds (%d) without\
-                      improvement in loss of at least %.2f percent exceeded" 
-                      % (self.early_stopping_rounds, self.delta*100.))
+                print("Exceeded patience (%d)" % self.early_stopping_rounds)
                 print("--> stopping training after %d epochs" 
                       % (epoch_num))
                 train_more = False
@@ -176,15 +195,98 @@ class CNNHelper(TrainHelper):
                 train_more = False
         return
 
+    def make_plots(self):
+        print("Making assessment plots")
+        plot_dir = self.out_dir+"plots/"
+        # Loss timeseriese
+        df = pandas.DataFrame(self.metrics)
+        # Plot
+        fig, axes = plt.subplots()
+        plt.plot(df.loss, label="training")
+        plt.plot(df.val_loss, label="validation")
+        # Plot formatting
+        plt.legend()
+        plt.xlabel("Epochs")
+        plt.ylabel("Weight Crossentropy")
+        plt.title("Loss Timeseries")
+        plt.savefig(plot_dir+"loss_timeseries.png")
+        plt.close(fig)
+        # ROC Curve
+        training_generator = DataGenerator3D(
+            data=self.data,
+            metadata=self.metadata,
+            input_shape=self.input_shape,
+            patients=self.patients_train,
+            batch_size=4,
+            extra_features=self.extra_features
+        )
+        labels = []
+        preds = []
+        for i in range(len(training_generator)):
+            # Get data, label, and prediction
+            X, y = training_generator.__getitem__(i)
+            pred = self.model.predict(X)
+            # Add to list
+            preds += list(pred)
+            labels += list(y)
+
+        labels = numpy.array(labels)
+        preds = numpy.array(preds)
+        # Get false/true positive rates, AUC
+        fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
+        print(labels.flatten())
+        print(preds.flatten())
+        validation_generator = DataGenerator3D(
+            data=self.data,
+            metadata=self.metadata,
+            input_shape=self.input_shape,
+            patients=self.patients_test,
+            batch_size=4,
+            extra_features=self.extra_features
+        )
+        labels = []
+        preds = []
+        for i in range(len(validation_generator)):
+            # Get data, label, and prediction
+            X, y = validation_generator.__getitem__(0)
+            pred = self.model.predict(X)
+            # Add to list
+            labels.append(y)
+            if i == 0:
+                preds = pred
+            else:
+                preds = numpy.concatenate([preds, pred])
+        labels = numpy.array(labels)
+        preds = numpy.array(preds)
+        # Get false/true positive rates, AUC
+        fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
+        print(labels.flatten())
+        print(preds.flatten())
+        # Plot
+        fig, axes = plt.subplots()
+        axes.plot(fprs, tprs, label="%s [AUC: %.3f]" % (self.tag, auc))
+        # Formatting
+        plt.xlim([-0.05,1.05])
+        plt.ylim([-0.05,1.05])
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.legend(loc="lower right")
+        plt.savefig(plot_dir+"roc_curve.png")
+        plt.close(fig)
+
+        return
+        
+
 if __name__ == "__main__":
     # Initialize helper
     cnn_helper = CNNHelper()
     # Initialize model
     cnn3D_config = {
         "input_shape": cnn_helper.input_shape,
+        "n_extra_features": cnn_helper.n_extra_features,
         "dropout": 0.25,
         "batch_norm": False,
-        "learning_rate": 0.00005,
+        "learning_rate": 0.0000005,
         "bce_alpha": cnn_helper.bce_alpha,
         "dice_smooth": cnn_helper.dice_smooth,
         "loss_function": cnn_helper.loss_function 
@@ -192,3 +294,4 @@ if __name__ == "__main__":
     model = cnn(cnn3D_config)
     # Train model
     cnn_helper.run_training(model, cnn3D_config)
+    cnn_helper.make_plots()
