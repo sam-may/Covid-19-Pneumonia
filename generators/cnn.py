@@ -55,12 +55,13 @@ class DataGenerator3D(keras.utils.Sequence):
         X = self.data.get(patient)
         # Extra features
         x = []
-        for feature in self.extra_features:
-            f = self.metadata[patient][feature]
-            if type(f) == list:
-                x += f
-            else:
-                x += [f]
+        if self.extra_features:
+            for feature in self.extra_features:
+                f = self.metadata[patient][feature]
+                if type(f) == list:
+                    x += f
+                else:
+                    x += [f]
         # Label
         y = self.metadata[patient]["malignant"]
 
