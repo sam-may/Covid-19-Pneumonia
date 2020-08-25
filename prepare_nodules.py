@@ -13,18 +13,21 @@ class NodulesPrepper():
         cli = argparse.ArgumentParser()
         cli.add_argument(
             "--mask_hdf5", 
+            required=True,
             help="path to annotated CT scan hdf5 file", 
             type=str, 
             default=""
         )
         cli.add_argument(
             "--scan_hdf5", 
+            required=True,
             help="path to CT scan hdf5 file", 
             type=str, 
             default=""
         )
         cli.add_argument(
             "--dicom_json", 
+            required=True,
             help="path to processed JSON dump of DICOM file for CT scans", 
             type=str, 
             default=""
@@ -291,7 +294,7 @@ class NodulesPrepper():
 
 if __name__ == "__main__":
     prepper = NodulesPrepper(
-        bounding_volume=(40,40,20),
+        bounding_volume=(64,64,32),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
     # Run data pre-processing
