@@ -2,6 +2,8 @@ import h5py
 import json
 import numpy
 import pandas
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
@@ -20,6 +22,12 @@ class CNNHelper(TrainHelper):
             default=0.01
         )
         self.cli.add_argument(
+            "--no_early_stopping",
+            help="Disable early stopping",
+            action="store_true",
+            default=False
+        )
+        self.cli.add_argument(
             "--early_stopping_rounds",
             help="Percent by which loss must improve",
             type=int,
@@ -29,7 +37,7 @@ class CNNHelper(TrainHelper):
             "--increase_batch",
             help="Increase batch if more than one 'bad' epoch",
             action="store_true",
-            default=True
+            default=False
         )
         self.cli.add_argument(
             "--decay_learning_rate",
@@ -155,6 +163,14 @@ class CNNHelper(TrainHelper):
             # Update epoch metrics
             print("Saving epoch metrics")
             self.save_metrics(results.history)
+            # Stop training after epoch cap
+            if self.max_epochs > 0 and epoch_num >= self.max_epochs:
+                print("Maximum number of training epochs (%d) reached" 
+                      % (self.max_epochs))
+                print("--> stopped training")
+                train_more = False
+            if self.no_early_stopping:
+                continue
             # Calculate % change for early stopping
             val_loss = results.history["val_loss"][0]
             percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
@@ -186,12 +202,6 @@ class CNNHelper(TrainHelper):
                 print("Exceeded patience (%d)" % self.early_stopping_rounds)
                 print("--> stopping training after %d epochs" 
                       % (epoch_num))
-                train_more = False
-            # Stop training after epoch cap
-            if self.max_epochs > 0 and epoch_num >= self.max_epochs:
-                print("Maximum number of training epochs (%d) reached" 
-                      % (self.max_epochs))
-                print("--> stopped training")
                 train_more = False
         return
 

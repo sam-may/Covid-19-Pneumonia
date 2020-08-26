@@ -7,7 +7,9 @@ python train_cnn3D.py \
 --training_batch_size=16 \
 --validation_batch_size=16 \
 --max_batch_size=64 \
+--increase_batch \
 --random_seed=0 \
 --train_frac=0.7 \
 --loss_function="weighted_crossentropy" \
---extra_features center_of_mass_norm nodule_volume_norm
+--extra_features center_of_mass_norm nodule_volume_norm \
+--no_early_stopping
