@@ -221,31 +221,8 @@ class CNNHelper(TrainHelper):
         plt.title("Loss Timeseries")
         plt.savefig(plot_dir+"loss_timeseries.png")
         plt.close(fig)
-        # ROC Curve
-        training_generator = DataGenerator3D(
-            data=self.data,
-            metadata=self.metadata,
-            input_shape=self.input_shape,
-            patients=self.patients_train,
-            batch_size=4,
-            extra_features=self.extra_features
-        )
-        labels = []
-        preds = []
-        for i in range(len(training_generator)):
-            # Get data, label, and prediction
-            X, y = training_generator.__getitem__(i)
-            pred = self.model.predict(X)
-            # Add to list
-            preds += list(pred)
-            labels += list(y)
-
-        labels = numpy.array(labels)
-        preds = numpy.array(preds)
         # Get false/true positive rates, AUC
         fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
-        print(labels.flatten())
-        print(preds.flatten())
         validation_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
@@ -270,9 +247,7 @@ class CNNHelper(TrainHelper):
         preds = numpy.array(preds)
         # Get false/true positive rates, AUC
         fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
-        print(labels.flatten())
-        print(preds.flatten())
-        # Plot
+        # ROC Curve
         fig, axes = plt.subplots()
         axes.plot(fprs, tprs, label="%s [AUC: %.3f]" % (self.tag, auc))
         # Formatting
