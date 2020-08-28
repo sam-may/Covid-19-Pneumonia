@@ -148,8 +148,6 @@ class NodulesPrepper():
         bound_x = int(round(1.0*bound_x/x_spacing))
         bound_y = int(round(1.0*bound_y/y_spacing))
         bound_z = int(round(1.0*bound_z/z_spacing))
-        print("Physical volume in pixel coordiantes:")
-        print((bound_x, bound_y, bound_z))
         # Calculate sampled volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
@@ -171,7 +169,6 @@ class NodulesPrepper():
             y__ += abs(y_)
             y_ = 0
         if z_ < 0: 
-            print("uh oh")
             z__ += abs(z_)
             z_ = 0
         if _x > scan_x:
@@ -183,20 +180,6 @@ class NodulesPrepper():
         if _z > scan_z:
             __z -= (_z - scan_z)
             _z = scan_z
-        print("Volume to sample from scan/mask:")
-        print("x boundaries: %d to %d" % (x_, _x))
-        print("y boundaries: %d to %d" % (y_, _y))
-        print("z boundaries: %d to %d" % (z_, _z))
-        print("sampled shape:")
-        print(ct_mask[x_:_x,y_:_y,z_:_z].shape)
-        print(ct_scan[x_:_x,y_:_y,z_:_z].shape)
-        print("Volume to set in bound volume:")
-        print("prepared shape:")
-        print(bound_mask[x__:__x,y__:__y,z__:__z].shape)
-        print(bound_scan[x__:__x,y__:__y,z__:__z].shape)
-        print("x boundaries: %d to %d" % (x__, __x))
-        print("y boundaries: %d to %d" % (y__, __y))
-        print("z boundaries: %d to %d" % (z__, __z))
         # Fill bounding volume
         bound_mask[x__:__x,y__:__y,z__:__z] = ct_mask[x_:_x,y_:_y,z_:_z]
         bound_scan[x__:__x,y__:__y,z__:__z] = ct_scan[x_:_x,y_:_y,z_:_z]
