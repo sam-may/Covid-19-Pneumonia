@@ -4,12 +4,14 @@ import h5py
 import json
 import random
 import argparse
+from scipy import ndimage
 import numpy as np
 import matplotlib.pyplot as plt
 from helpers.print_helper import print
 
 class NodulesPrepper():
-    def __init__(self, bounding_volume=(20,20,20), patient_regex=""):
+    def __init__(self, bounding_volume=(32,32,32), physical_volume=(20,20,20),
+                 patient_regex=""):
         cli = argparse.ArgumentParser()
         cli.add_argument(
             "--mask_hdf5", 
@@ -43,6 +45,7 @@ class NodulesPrepper():
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
         # Load kwargs
         self.bounding_volume = bounding_volume
+        self.physical_volume = physical_volume
         self.pattern = re.compile(patient_regex)
         # Open HDF5 files
         self.scan_data = h5py.File(self.scan_hdf5, "r")
@@ -140,7 +143,11 @@ class NodulesPrepper():
         y_COM = int(round(y_COM))
         z_COM = int(round(z_COM))
         # Get bounding volume edges
-        bound_x, bound_y, bound_z = self.bounding_volume
+        bound_x, bound_y, bound_z = self.physical_volume
+        # Translate to pixel coordinates
+        bound_x = int(round(1.0*bound_x/x_spacing))
+        bound_y = int(round(1.0*bound_y/y_spacing))
+        bound_z = int(round(1.0*bound_z/z_spacing))
         # Calculate bound volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
@@ -164,6 +171,17 @@ class NodulesPrepper():
         # Apply z-score norm to bound CT scan volume
         bound_scan -= self.mean
         bound_scan *= 1./self.std
+        # Rescale to physical volume
+        target_x, target_y, target_z = self.bounding_volume
+        scale_x = target_x/(bound_x)
+        scale_y = target_y/(bound_y)
+        scale_z = target_z/(bound_z)
+        bound_scan = ndimage.zoom(bound_scan, (scale_x, scale_y, scale_z))
+        bound_mask = ndimage.zoom(bound_mask, (scale_x, scale_y, scale_z))
+        # Remove interpolation artifacts from mask
+        bound_mask = np.round(bound_mask)
+        bound_mask[bound_mask > 0] = 1
+        bound_mask[bound_mask < 0] = 0
         # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
         # Volumetric metadata
@@ -178,8 +196,6 @@ class NodulesPrepper():
             "nodule_volume": nodule_volume,
             "exceeds_volume": int(M > bound_M)
         }
-        if M < bound_M:
-            print("uh... what? this is %s" % patient)
         self.add_metadata(patient, patient_metadata)
         return bound_stack
 
@@ -294,7 +310,8 @@ class NodulesPrepper():
 
 if __name__ == "__main__":
     prepper = NodulesPrepper(
-        bounding_volume=(64,64,32),
+        bounding_volume=(64,64,64),
+        physical_volume=(45,45,45),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
     # Run data pre-processing
