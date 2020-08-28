@@ -189,15 +189,15 @@ class NodulesPrepper():
         bound_scan *= 1./self.std
         # Rescale to physical volume
         target_x, target_y, target_z = self.bounding_volume
-        scale_x = target_x/(bound_x)
-        scale_y = target_y/(bound_y)
-        scale_z = target_z/(bound_z)
+        scale_x = target_x/float(bound_x//2*2)
+        scale_y = target_y/float(bound_y//2*2)
+        scale_z = target_z/float(bound_z//2*2)
         bound_scan = ndimage.zoom(bound_scan, (scale_x, scale_y, scale_z))
         bound_mask = ndimage.zoom(bound_mask, (scale_x, scale_y, scale_z))
         # Remove interpolation artifacts from mask
         bound_mask = np.abs(np.round(bound_mask))
         bound_mask[bound_mask > 0] = 1
-        bound_mask[bound_mask < 0] = 0
+        bound_mask = ndimage.binary_fill_holes(bound_mask).astype(int)
         # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
         # Volumetric metadata
