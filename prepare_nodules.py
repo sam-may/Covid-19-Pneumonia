@@ -148,27 +148,60 @@ class NodulesPrepper():
         bound_x = int(round(1.0*bound_x/x_spacing))
         bound_y = int(round(1.0*bound_y/y_spacing))
         bound_z = int(round(1.0*bound_z/z_spacing))
-        # Calculate bound volume edges
+        print("Physical volume in pixel coordiantes:")
+        print((bound_x, bound_y, bound_z))
+        # Calculate sampled volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
         y_ = y_COM - bound_y//2
         _y = y_COM + bound_y//2
         z_ = z_COM - bound_z//2
         _z = z_COM + bound_z//2
-        # Check scan boundaries
+        # Initialize bound volume edges
+        x__ = y__ = z__ = 0
+        __x, __y, __z = (bound_x//2*2, bound_y//2*2, bound_z//2*2)
+        # Check scan boundaries, pad with zeros where necessary
         scan_x, scan_y, scan_z = ct_mask.shape
-        if x_ < 0 or y_ < 0 or z_ < 0:
-            print("Bounding box outside of CT volume")
-            print("--> skipping")
-            return
-        if _x > scan_x or _y > scan_y or _z > scan_z:
-            print("Bounding box outside of CT volume")
-            print("--> skipping")
-            return
+        bound_mask = np.zeros((__x, __y, __z))
+        bound_scan = np.zeros((__x, __y, __z))
+        if x_ < 0: 
+            x__ += abs(x_)
+            x_ = 0
+        if y_ < 0: 
+            y__ += abs(y_)
+            y_ = 0
+        if z_ < 0: 
+            print("uh oh")
+            z__ += abs(z_)
+            z_ = 0
+        if _x > scan_x:
+            __x -= (_x - scan_x)
+            _x = scan_x
+        if _y > scan_y:
+            __y -= (_y - scan_y)
+            _y = scan_y
+        if _z > scan_z:
+            __z -= (_z - scan_z)
+            _z = scan_z
+        print("Volume to sample from scan/mask:")
+        print("x boundaries: %d to %d" % (x_, _x))
+        print("y boundaries: %d to %d" % (y_, _y))
+        print("z boundaries: %d to %d" % (z_, _z))
+        print("sampled shape:")
+        print(ct_mask[x_:_x,y_:_y,z_:_z].shape)
+        print(ct_scan[x_:_x,y_:_y,z_:_z].shape)
+        print("Volume to set in bound volume:")
+        print("prepared shape:")
+        print(bound_mask[x__:__x,y__:__y,z__:__z].shape)
+        print(bound_scan[x__:__x,y__:__y,z__:__z].shape)
+        print("x boundaries: %d to %d" % (x__, __x))
+        print("y boundaries: %d to %d" % (y__, __y))
+        print("z boundaries: %d to %d" % (z__, __z))
         # Fill bounding volume
-        bound_mask = ct_mask[x_:_x,y_:_y,z_:_z]
-        bound_scan = ct_scan[x_:_x,y_:_y,z_:_z].astype(np.float64)
+        bound_mask[x__:__x,y__:__y,z__:__z] = ct_mask[x_:_x,y_:_y,z_:_z]
+        bound_scan[x__:__x,y__:__y,z__:__z] = ct_scan[x_:_x,y_:_y,z_:_z]
         # Apply z-score norm to bound CT scan volume
+        bound_scan = bound_scan.astype(np.float64)
         bound_scan -= self.mean
         bound_scan *= 1./self.std
         # Rescale to physical volume
@@ -179,7 +212,7 @@ class NodulesPrepper():
         bound_scan = ndimage.zoom(bound_scan, (scale_x, scale_y, scale_z))
         bound_mask = ndimage.zoom(bound_mask, (scale_x, scale_y, scale_z))
         # Remove interpolation artifacts from mask
-        bound_mask = np.round(bound_mask)
+        bound_mask = np.abs(np.round(bound_mask))
         bound_mask[bound_mask > 0] = 1
         bound_mask[bound_mask < 0] = 0
         # Stack inputs
@@ -311,7 +344,7 @@ class NodulesPrepper():
 if __name__ == "__main__":
     prepper = NodulesPrepper(
         bounding_volume=(64,64,64),
-        physical_volume=(45,45,45),
+        physical_volume=(50,50,50),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
     # Run data pre-processing
