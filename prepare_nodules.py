@@ -4,6 +4,7 @@ import h5py
 import json
 import random
 import argparse
+from multiprocessing import Pool
 from math import ceil
 from scipy import ndimage
 import numpy as np
@@ -47,27 +48,51 @@ class NodulesPrepper():
             type=int, 
             default=3
         )
+        cli.add_argument(
+            "--max_processes", 
+            help="(optional) maximum number of processes to run", 
+            type=int, 
+            default=0
+        )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
+        if self.max_processes == 0:
+            print("Setting max processes to %d" % (self.rotations+1))
+            self.max_processes = self.rotations+1
+        elif self.max_processes < 0:
+            raise ValueError("Can't have a negative number of processes!")
         # Load kwargs
         self.bounding_volume = bounding_volume
         self.physical_volume = physical_volume
         self.pattern = re.compile(patient_regex)
         # Open HDF5 files
-        self.scan_data = h5py.File(self.scan_hdf5, "r")
-        self.mask_data = h5py.File(self.mask_hdf5, "r")
-        self.patients = [k for k in list(self.mask_data.keys()) 
+        print("Loading patients")
+        scan_data = h5py.File(self.scan_hdf5, "r")
+        mask_data = h5py.File(self.mask_hdf5, "r")
+        self.patients = [k for k in list(mask_data.keys()) 
                          if self.pattern.match(k)]
+        masks_in_scans = np.isin(self.patients, list(scan_data.keys()))
+        if not np.all(masks_in_scans):
+            print("The following patients in %s have no counterpart in %s:" 
+                  % (self.mask_hdf5, self.scan_hdf5))
+            self.patients = np.array(self.patients)
+            for patient in self.patients[~masks_in_scans]:
+                print("  - %s" % patient)
+            print("--> skipping the patients listed above")
+            self.patients = list(self.patients[masks_in_scans])
+        scan_data.close()
+        mask_data.close()
         if not self.output_hdf5:
             self.output_dir = self.input_dir
             self.output_hdf5 = self.output_dir+"features.hdf5"
+            self.metadata_json = self.output_dir+"features_metadata.json"
         else:
             self.output_dir = os.path.dirname(self.output_hdf5)
             if self.output_dir != "":
                 self.output_dir += "/"
-        self.metadata_json = self.output_dir+"metadata.json"
-        self.output_data = h5py.File(self.output_hdf5, "w")
+            self.metadata_json = self.output_hdf5.split(".hdf5")[0]+"_metadata.json"
+        # Initialize metadata object
         self.metadata = {}
         # Open DICOM JSON
         with open(self.dicom_json, "r") as f_in:
@@ -78,9 +103,10 @@ class NodulesPrepper():
     def calc_mean_and_std(self):
         """Calculate mean and std dev of ALL pixels for z-score norm"""
         print("Calculating mean and std of all pixels")
+        scan_data = h5py.File(self.scan_hdf5, "r")
         pixel_values = []
         for patient in self.patients:
-            ct_scan = self.scan_data.get(patient)
+            ct_scan = scan_data.get(patient)
             # Get random slices from scan
             for _ in range(5):
                 random_z = random.randint(0, ct_scan.shape[-1]-1)
@@ -94,6 +120,7 @@ class NodulesPrepper():
         mean = np.mean(pixel_values.astype(np.float64))
         std = np.std(pixel_values.astype(np.float64))
         print("Result: mean = %.3f, std = %.3f" % (mean, std))
+        scan_data.close()
         return mean, std
 
     def add_metadata(self, patient, patient_metadata):
@@ -109,11 +136,13 @@ class NodulesPrepper():
             json.dump(self.metadata, f_out, indent=4)
         return
 
-    def process_patient(self, patient, rotation=0):
+    def process_patient(self, patient, rotation):
         """
         Isolate annotated lung nodule within a given bounding volume, return 
         save multichannel volume (scan, mask)
         """
+        scan_data = h5py.File(self.scan_hdf5, "r")
+        mask_data = h5py.File(self.mask_hdf5, "r")
         # DICOM metadata
         if patient not in self.dicom_data.keys():
             print("No DICOM data for patient %s" % patient)
@@ -131,9 +160,9 @@ class NodulesPrepper():
             return
         x_spacing, y_spacing = patient_dicom["PixelSpacing"] # in mm
         # Load scan h5py dataset object
-        ct_scan = self.scan_data.get(patient)
+        ct_scan = scan_data.get(patient)
         # Load mask directly to memory
-        ct_mask = np.array(self.mask_data.get(patient))
+        ct_mask = np.array(mask_data.get(patient))
         ct_mask = ct_mask[:,:,:,0]
         # Rotate the CT volume
         if rotation != 0:
@@ -225,42 +254,49 @@ class NodulesPrepper():
             "exceeds_volume": int(M > bound_M),
             "rotation": rotation
         }
+        out_name = patient
         if rotation != 0:
-            patient += "_rot_%d" % rotation
-        self.add_metadata(patient, patient_metadata)
-        return bound_stack
+            out_name += "_rot_%d" % rotation
+        self.add_metadata(out_name, patient_metadata)
+        # Close HDF5 files
+        scan_data.close()
+        mask_data.close()
+        return bound_stack, out_name
 
     def process(self):
         """Process data for all patients in annotated dataset"""
-        print("Loading patients")
-        masks_in_scans = np.isin(self.patients, list(self.scan_data.keys()))
-        if not np.all(masks_in_scans):
-            print("The following patients in %s have no counterpart in %s:" 
-                  % (self.mask_hdf5, self.scan_hdf5))
-            self.patients = np.array(self.patients)
-            for patient in self.patients[~masks_in_scans]:
-                print("  - %s" % patient)
-            print("--> skipping the patients listed above")
-            self.patients = list(self.patients[masks_in_scans])
         print("Parsing patients")
-        # Run annotation search
+        output_data = h5py.File(self.output_hdf5, "w")
+        n_jobs = self.rotations+1 # n_jobs == len(angles)
+        n_batches = n_jobs//self.max_processes
         for patient in self.patients:
             print("Processing {}".format(patient))
-            for r in range(self.rotations+1):
-                angle = random.randint(10, 350) if r > 0 else 0
-                bound_stack = self.process_patient(patient, rotation=angle)
-                out_name = patient
-                if r > 0:
-                    out_name = "%s_rot_%d" % (patient, angle)
+            jobs_processed = 0
+            angles = [0] + random.sample(range(10, 350), self.rotations)
+            for batch in range(n_batches):
+                n_workers = 0
+                if jobs_processed + self.max_processes <= n_jobs:
+                    n_workers = self.max_processes
+                else:
+                    n_workers = n_jobs - jobs_processed
+                batch_angles = angles[jobs_processed:jobs_processed+n_workers]
+                pool = Pool(n_workers)
+                args = [(patient, rotation) for rotation in batch_angles]
+                results = pool.starmap(self.process_patient, args)
                 # Write to output hdf5 file
-                if np.any(bound_stack):
-                    print("Wrote %s to %s" % (out_name, self.output_hdf5))
-                    self.output_data.create_dataset(out_name, data=bound_stack)
+                for result in results:
+                    # Unpack
+                    bound_stack, out_name = result
+                    # Write
+                    if np.any(bound_stack):
+                        output_data.create_dataset(out_name, data=bound_stack)
+                        print("Wrote %s to %s" % (out_name, self.output_hdf5))
+                # Wrap up batch
+                jobs_processed += n_workers
+                pool.close()
         print("Wrapping up")
-        self.scan_data.close()
-        self.mask_data.close()
-        self.output_data.close()
         self.write_metadata()
+        output_data.close()
         return
 
     def add_labels(self, benign_txt, scc_txt, adeno_txt, existing_json=None):
