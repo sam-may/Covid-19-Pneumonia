@@ -4,6 +4,7 @@ import h5py
 import json
 import random
 import argparse
+from math import ceil
 from scipy import ndimage
 import numpy as np
 import matplotlib.pyplot as plt
@@ -40,6 +41,12 @@ class NodulesPrepper():
             type=str, 
             default=""
         )
+        cli.add_argument(
+            "--rotations", 
+            help="(optional) number of axial rotations per patient", 
+            type=int, 
+            default=3
+        )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
@@ -54,11 +61,11 @@ class NodulesPrepper():
                          if self.pattern.match(k)]
         if not self.output_hdf5:
             self.output_dir = self.input_dir
+            self.output_hdf5 = self.output_dir+"features.hdf5"
         else:
             self.output_dir = os.path.dirname(self.output_hdf5)
             if self.output_dir != "":
                 self.output_dir += "/"
-        self.output_hdf5 = self.output_dir+"features.hdf5"
         self.metadata_json = self.output_dir+"metadata.json"
         self.output_data = h5py.File(self.output_hdf5, "w")
         self.metadata = {}
@@ -102,7 +109,7 @@ class NodulesPrepper():
             json.dump(self.metadata, f_out, indent=4)
         return
 
-    def process_patient(self, patient):
+    def process_patient(self, patient, rotation=0):
         """
         Isolate annotated lung nodule within a given bounding volume, return 
         save multichannel volume (scan, mask)
@@ -128,6 +135,11 @@ class NodulesPrepper():
         # Load mask directly to memory
         ct_mask = np.array(self.mask_data.get(patient))
         ct_mask = ct_mask[:,:,:,0]
+        # Rotate the CT volume
+        if rotation != 0:
+            print("Rotating by %d degrees" % rotation)
+            ct_mask = ndimage.rotate(ct_mask, rotation, reshape=False)
+            ct_scan = ndimage.rotate(ct_scan, rotation, reshape=False)
         # Get COM of nodule to the nearest pixel
         M = float(np.sum(ct_mask)) # 'mass' of nodule
         if M == 0:
@@ -145,9 +157,9 @@ class NodulesPrepper():
         # Get bounding volume edges
         bound_x, bound_y, bound_z = self.physical_volume
         # Translate to pixel coordinates
-        bound_x = int(round(1.0*bound_x/x_spacing))
-        bound_y = int(round(1.0*bound_y/y_spacing))
-        bound_z = int(round(1.0*bound_z/z_spacing))
+        bound_x = round(1.0*bound_x/x_spacing)
+        bound_y = round(1.0*bound_y/y_spacing)
+        bound_z = round(1.0*bound_z/z_spacing)
         # Calculate sampled volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
@@ -210,8 +222,11 @@ class NodulesPrepper():
                 z_COM*z_spacing
             ],
             "nodule_volume": nodule_volume,
-            "exceeds_volume": int(M > bound_M)
+            "exceeds_volume": int(M > bound_M),
+            "rotation": rotation
         }
+        if rotation != 0:
+            patient += "_rot_%d" % rotation
         self.add_metadata(patient, patient_metadata)
         return bound_stack
 
@@ -231,10 +246,16 @@ class NodulesPrepper():
         # Run annotation search
         for patient in self.patients:
             print("Processing {}".format(patient))
-            bound_stack = self.process_patient(patient)
-            # Write to output hdf5 file
-            if np.any(bound_stack):
-                self.output_data.create_dataset(patient, data=bound_stack)
+            for r in range(self.rotations+1):
+                angle = random.randint(10, 350) if r > 0 else 0
+                bound_stack = self.process_patient(patient, rotation=angle)
+                out_name = patient
+                if r > 0:
+                    out_name = "%s_rot_%d" % (patient, angle)
+                # Write to output hdf5 file
+                if np.any(bound_stack):
+                    print("Wrote %s to %s" % (out_name, self.output_hdf5))
+                    self.output_data.create_dataset(out_name, data=bound_stack)
         print("Wrapping up")
         self.scan_data.close()
         self.mask_data.close()
@@ -264,7 +285,7 @@ class NodulesPrepper():
         # Get unique list of labeled patients
         labeled_patients = list(set(benign+scc+adeno))
         # Fill metadata
-        for patient_id in self.patients:
+        for patient_id in self.metadata.keys():
             patient_metadata = {}
             patient = patient_id.split("_ser_")[0]
             if patient not in labeled_patients:
