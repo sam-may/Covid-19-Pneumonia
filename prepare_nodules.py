@@ -2,23 +2,37 @@ import os
 import re
 import h5py
 import json
+import random
 import argparse
+from multiprocessing import Pool
+from math import ceil
+from scipy import ndimage
 import numpy as np
 import matplotlib.pyplot as plt
 from helpers.print_helper import print
 
 class NodulesPrepper():
-    def __init__(self, bounding_volume=(64,64,16), patient_regex=""):
+    def __init__(self, bounding_volume=(32,32,32), physical_volume=(20,20,20),
+                 patient_regex=""):
         cli = argparse.ArgumentParser()
         cli.add_argument(
             "--mask_hdf5", 
+            required=True,
             help="path to annotated CT scan hdf5 file", 
             type=str, 
             default=""
         )
         cli.add_argument(
             "--scan_hdf5", 
+            required=True,
             help="path to CT scan hdf5 file", 
+            type=str, 
+            default=""
+        )
+        cli.add_argument(
+            "--dicom_json", 
+            required=True,
+            help="path to processed JSON dump of DICOM file for CT scans", 
             type=str, 
             default=""
         )
@@ -28,27 +42,86 @@ class NodulesPrepper():
             type=str, 
             default=""
         )
+        cli.add_argument(
+            "--rotations", 
+            help="(optional) number of axial rotations per patient", 
+            type=int, 
+            default=3
+        )
+        cli.add_argument(
+            "--max_processes", 
+            help="(optional) maximum number of processes to run", 
+            type=int, 
+            default=0
+        )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
+        if self.max_processes == 0:
+            print("Setting max processes to %d" % (self.rotations+1))
+            self.max_processes = self.rotations+1
+        elif self.max_processes < 0:
+            raise ValueError("Can't have a negative number of processes!")
         # Load kwargs
         self.bounding_volume = bounding_volume
+        self.physical_volume = physical_volume
         self.pattern = re.compile(patient_regex)
         # Open HDF5 files
-        self.scan_data = h5py.File(self.scan_hdf5, "r")
-        self.mask_data = h5py.File(self.mask_hdf5, "r")
-        self.patients = [k for k in list(self.mask_data.keys()) 
+        print("Loading patients")
+        scan_data = h5py.File(self.scan_hdf5, "r")
+        mask_data = h5py.File(self.mask_hdf5, "r")
+        self.patients = [k for k in list(mask_data.keys()) 
                          if self.pattern.match(k)]
+        masks_in_scans = np.isin(self.patients, list(scan_data.keys()))
+        if not np.all(masks_in_scans):
+            print("The following patients in %s have no counterpart in %s:" 
+                  % (self.mask_hdf5, self.scan_hdf5))
+            self.patients = np.array(self.patients)
+            for patient in self.patients[~masks_in_scans]:
+                print("  - %s" % patient)
+            print("--> skipping the patients listed above")
+            self.patients = list(self.patients[masks_in_scans])
+        scan_data.close()
+        mask_data.close()
         if not self.output_hdf5:
             self.output_dir = self.input_dir
+            self.output_hdf5 = self.output_dir+"features.hdf5"
+            self.metadata_json = self.output_dir+"features_metadata.json"
         else:
             self.output_dir = os.path.dirname(self.output_hdf5)
             if self.output_dir != "":
                 self.output_dir += "/"
-        self.output_hdf5 = self.output_dir+"features.hdf5"
-        self.metadata_json = self.output_dir+"metadata.json"
-        self.output_data = h5py.File(self.output_hdf5, "w")
+            self.metadata_json = self.output_hdf5.split(".hdf5")[0]+"_metadata.json"
+        # Initialize metadata object
         self.metadata = {}
+        # Open DICOM JSON
+        with open(self.dicom_json, "r") as f_in:
+            self.dicom_data = json.load(f_in)
+        # Mean and std for z-score normalization
+        self.mean, self.std = self.calc_mean_and_std()
+
+    def calc_mean_and_std(self):
+        """Calculate mean and std dev of ALL pixels for z-score norm"""
+        print("Calculating mean and std of all pixels")
+        scan_data = h5py.File(self.scan_hdf5, "r")
+        pixel_values = []
+        for patient in self.patients:
+            ct_scan = scan_data.get(patient)
+            # Get random slices from scan
+            for _ in range(5):
+                random_z = random.randint(0, ct_scan.shape[-1]-1)
+                ct_slice = ct_scan[:,:,random_z]
+                # Get all nonzero pixels
+                slice_pixels = ct_slice[np.nonzero(ct_slice)].flatten()
+                pixel_values = np.concatenate((pixel_values, slice_pixels))
+                # Arbitrary cap
+                if len(pixel_values) >= 10**6:
+                    break
+        mean = np.mean(pixel_values.astype(np.float64))
+        std = np.std(pixel_values.astype(np.float64))
+        print("Result: mean = %.3f, std = %.3f" % (mean, std))
+        scan_data.close()
+        return mean, std
 
     def add_metadata(self, patient, patient_metadata):
         if patient in self.metadata.keys():
@@ -63,16 +136,39 @@ class NodulesPrepper():
             json.dump(self.metadata, f_out, indent=4)
         return
 
-    def process_patient(self, patient):
+    def process_patient(self, patient, rotation):
         """
         Isolate annotated lung nodule within a given bounding volume, return 
         save multichannel volume (scan, mask)
         """
+        scan_data = h5py.File(self.scan_hdf5, "r")
+        mask_data = h5py.File(self.mask_hdf5, "r")
+        # DICOM metadata
+        if patient not in self.dicom_data.keys():
+            print("No DICOM data for patient %s" % patient)
+            print("--> skipping")
+            return
+        patient_dicom = self.dicom_data[patient]
+        z_spacing = 1.0
+        if "SpacingBetweenSlices" in patient_dicom.keys():
+            z_spacing = patient_dicom["SpacingBetweenSlices"] # in mm
+        elif "SliceThickness" in patient_dicom.keys():
+            z_spacing = patient_dicom["SliceThickness"]/2.0 # in mm
+        else:
+            print("No slice thickness data for patient %s" % patient)
+            print("--> skipping")
+            return
+        x_spacing, y_spacing = patient_dicom["PixelSpacing"] # in mm
         # Load scan h5py dataset object
-        ct_scan = self.scan_data.get(patient)
+        ct_scan = scan_data.get(patient)
         # Load mask directly to memory
-        ct_mask = np.array(self.mask_data.get(patient))
+        ct_mask = np.array(mask_data.get(patient))
         ct_mask = ct_mask[:,:,:,0]
+        # Rotate the CT volume
+        if rotation != 0:
+            print("Rotating by %d degrees" % rotation)
+            ct_mask = ndimage.rotate(ct_mask, rotation, reshape=False)
+            ct_scan = ndimage.rotate(ct_scan, rotation, reshape=False)
         # Get COM of nodule to the nearest pixel
         M = float(np.sum(ct_mask)) # 'mass' of nodule
         if M == 0:
@@ -88,68 +184,129 @@ class NodulesPrepper():
         y_COM = int(round(y_COM))
         z_COM = int(round(z_COM))
         # Get bounding volume edges
-        bound_x, bound_y, bound_z = self.bounding_volume
-        scan_x, scan_y, scan_z = ct_mask.shape
+        bound_x, bound_y, bound_z = self.physical_volume
+        # Translate to pixel coordinates
+        bound_x = round(1.0*bound_x/x_spacing)
+        bound_y = round(1.0*bound_y/y_spacing)
+        bound_z = round(1.0*bound_z/z_spacing)
+        # Calculate sampled volume edges
         x_ = x_COM - bound_x//2
         _x = x_COM + bound_x//2
         y_ = y_COM - bound_y//2
         _y = y_COM + bound_y//2
         z_ = z_COM - bound_z//2
         _z = z_COM + bound_z//2
-        # Check boundaries
-        if x_ < 0 or y_ < 0 or z_ < 0:
-            print("Bounding box outside of CT volume")
-            print("--> skipping")
-            return
-        if _x > scan_x or _y > scan_y or _z > scan_z:
-            print("Bounding box outside of CT volume")
-            print("--> skipping")
-            return
+        # Initialize bound volume edges
+        x__ = y__ = z__ = 0
+        __x, __y, __z = (bound_x//2*2, bound_y//2*2, bound_z//2*2)
+        # Check scan boundaries, pad with zeros where necessary
+        scan_x, scan_y, scan_z = ct_mask.shape
+        bound_mask = np.zeros((__x, __y, __z))
+        bound_scan = np.zeros((__x, __y, __z))
+        if x_ < 0: 
+            x__ += abs(x_)
+            x_ = 0
+        if y_ < 0: 
+            y__ += abs(y_)
+            y_ = 0
+        if z_ < 0: 
+            z__ += abs(z_)
+            z_ = 0
+        if _x > scan_x:
+            __x -= (_x - scan_x)
+            _x = scan_x
+        if _y > scan_y:
+            __y -= (_y - scan_y)
+            _y = scan_y
+        if _z > scan_z:
+            __z -= (_z - scan_z)
+            _z = scan_z
         # Fill bounding volume
-        bound_mask = ct_mask[x_:_x,y_:_y,z_:_z]
-        bound_scan = ct_scan[x_:_x,y_:_y,z_:_z]
+        bound_mask[x__:__x,y__:__y,z__:__z] = ct_mask[x_:_x,y_:_y,z_:_z]
+        bound_scan[x__:__x,y__:__y,z__:__z] = ct_scan[x_:_x,y_:_y,z_:_z]
+        # Apply z-score norm to bound CT scan volume
+        bound_scan = bound_scan.astype(np.float64)
+        bound_scan -= self.mean
+        bound_scan *= 1./self.std
+        # Rescale to physical volume
+        target_x, target_y, target_z = self.bounding_volume
+        scale_x = target_x/float(bound_x//2*2)
+        scale_y = target_y/float(bound_y//2*2)
+        scale_z = target_z/float(bound_z//2*2)
+        bound_scan = ndimage.zoom(bound_scan, (scale_x, scale_y, scale_z))
+        bound_mask = ndimage.zoom(bound_mask, (scale_x, scale_y, scale_z))
+        # Remove interpolation artifacts from mask
+        bound_mask = np.abs(np.round(bound_mask))
+        bound_mask[bound_mask > 0] = 1
+        bound_mask = ndimage.binary_fill_holes(bound_mask).astype(int)
+        # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
-        # Volumetric metadata
+        # Compute volumetric metadata
         bound_M = float(np.sum(bound_mask))
-        bound_volume = float(bound_x*bound_y*bound_z)
-        fraction_filled = np.sum(bound_mask > 0)/(bound_volume)
+        nodule_volume = np.sum(ct_mask > 0)*x_spacing*y_spacing*z_spacing
         patient_metadata = {
-            "center_of_mass": [x_COM, y_COM, z_COM],
-            "fraction_filled": fraction_filled,
-            "exceeds_volume": int(M > bound_M)
+            "center_of_mass": [
+                x_COM*x_spacing, 
+                y_COM*y_spacing, 
+                z_COM*z_spacing
+            ],
+            "nodule_volume": nodule_volume,
+            "exceeds_volume": int(M > bound_M),
+            "rotation": rotation
         }
-        self.add_metadata(patient, patient_metadata)
-        return bound_stack
+        # Format patient name for output
+        out_name = patient
+        if rotation != 0:
+            out_name += "_rot_%d" % rotation
+        # Close HDF5 files
+        scan_data.close()
+        mask_data.close()
+        return bound_stack, out_name, patient_metadata
 
     def process(self):
         """Process data for all patients in annotated dataset"""
-        print("Loading patients")
-        masks_in_scans = np.isin(self.patients, list(self.scan_data.keys()))
-        if not np.all(masks_in_scans):
-            print("The following patients in %s have no counterpart in %s:" 
-                  % (self.mask_hdf5, self.scan_hdf5))
-            self.patients = np.array(self.patients)
-            for patient in self.patients[~masks_in_scans]:
-                print("  - %s" % patient)
-            print("--> skipping the patients listed above")
-            self.patients = list(self.patients[masks_in_scans])
         print("Parsing patients")
-        # Run annotation search
+        output_data = h5py.File(self.output_hdf5, "w")
+        n_jobs = self.rotations+1 # n_jobs == len(angles)
+        n_batches = n_jobs//self.max_processes
         for patient in self.patients:
             print("Processing {}".format(patient))
-            bound_stack = self.process_patient(patient)
-            # Write to output hdf5 file
-            if np.any(bound_stack):
-                self.output_data.create_dataset(patient, data=bound_stack)
+            jobs_processed = 0
+            angles = [0] + random.sample(range(10, 350), self.rotations)
+            for batch in range(n_batches):
+                n_workers = 0
+                if jobs_processed + self.max_processes <= n_jobs:
+                    n_workers = self.max_processes
+                else:
+                    n_workers = n_jobs - jobs_processed
+                batch_angles = angles[jobs_processed:jobs_processed+n_workers]
+                pool = Pool(n_workers)
+                args = [(patient, rotation) for rotation in batch_angles]
+                results = pool.starmap(self.process_patient, args)
+                # Write to output hdf5 file
+                for result in results:
+                    if not type(result) == tuple:
+                        continue
+                    # Unpack
+                    bound_stack, out_name, patient_metadata = result
+                    # Write
+                    if np.any(bound_stack):
+                        output_data.create_dataset(out_name, data=bound_stack)
+                        print("Wrote %s to %s" % (out_name, self.output_hdf5))
+                        self.add_metadata(out_name, patient_metadata)
+                # Wrap up batch
+                jobs_processed += n_workers
+                pool.close()
         print("Wrapping up")
-        self.scan_data.close()
-        self.mask_data.close()
-        self.output_data.close()
         self.write_metadata()
+        output_data.close()
         return
 
-    def add_labels(self, benign_txt, scc_txt, adeno_txt):
+    def add_labels(self, benign_txt, scc_txt, adeno_txt, existing_json=None):
         """Add biopsy labels to patient metadata"""
+        if existing_json:
+            with open(existing_json, "r") as f_in:
+                self.metadata = json.load(f_in)
         # Get labels
         print("Loading labels")
         benign = []
@@ -167,7 +324,7 @@ class NodulesPrepper():
         # Get unique list of labeled patients
         labeled_patients = list(set(benign+scc+adeno))
         # Fill metadata
-        for patient_id in self.patients:
+        for patient_id in self.metadata.keys():
             patient_metadata = {}
             patient = patient_id.split("_ser_")[0]
             if patient not in labeled_patients:
@@ -183,9 +340,54 @@ class NodulesPrepper():
             # Save to metadata
             self.add_metadata(patient_id, patient_metadata)
 
+        self.write_metadata()
+        return
+
+    def normalize_metadata(self, name, existing_json=None):
+        print("Adding normalized '%s' values" % name)
+        if existing_json:
+            with open(existing_json, "r") as f_in:
+                self.metadata = json.load(f_in)
+        # Get mean and std of metadata field
+        values = []
+        componentwise = False
+        for patient, data in self.metadata.items():
+            if name not in data.keys():
+                continue
+            if len(values) == 0:
+                componentwise = (len(np.array(data[name]).shape) == 1)
+            values.append(data[name])
+        values = np.array(values)
+        means = []
+        stds = []
+        if componentwise:
+            for c in range(values.shape[-1]):
+                means.append(np.mean(values[:,c]))
+                stds.append(np.std(values[:,c]))
+        else:
+            means.append(np.mean(values.flatten()))
+            stds.append(np.std(values.flatten()))
+        for i, mean in enumerate(means):
+            std = stds[i]
+            for patient, data in self.metadata.items():
+                if name not in data.keys():
+                    continue
+                if componentwise:
+                    new_data = (data[name][i] - mean)/std
+                    if i == 0:
+                        self.metadata[patient][name+"_norm"] = [new_data]
+                    else:
+                        self.metadata[patient][name+"_norm"].append(new_data)
+                else:
+                    self.metadata[patient][name+"_norm"] = (data[name] - mean)/std
+        self.write_metadata()
+        return
+            
+
 if __name__ == "__main__":
     prepper = NodulesPrepper(
-        bounding_volume=(64,64,32),
+        bounding_volume=(64,64,64),
+        physical_volume=(50,50,50),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )
     # Run data pre-processing
@@ -195,4 +397,5 @@ if __name__ == "__main__":
         scc_txt="malignant-SCC.txt",
         adeno_txt="malignant-adeno.txt"
     )
-    prepper.write_metadata()
+    prepper.normalize_metadata("center_of_mass")
+    prepper.normalize_metadata("nodule_volume")

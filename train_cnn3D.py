@@ -1,12 +1,18 @@
+import re
 import h5py
 import json
+import random
 import numpy
+import pandas
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import tensorflow.keras as keras
 from helpers.train_helper import TrainHelper
 from helpers.print_helper import print
 from models.cnn import cnn3D as cnn
 from generators.cnn import DataGenerator3D
-from plots import calc_auc
+from plots.utils import calc_auc
 
 class CNNHelper(TrainHelper):
     def __init__(self):
@@ -18,6 +24,12 @@ class CNNHelper(TrainHelper):
             default=0.01
         )
         self.cli.add_argument(
+            "--no_early_stopping",
+            help="Disable early stopping",
+            action="store_true",
+            default=False
+        )
+        self.cli.add_argument(
             "--early_stopping_rounds",
             help="Percent by which loss must improve",
             type=int,
@@ -27,7 +39,7 @@ class CNNHelper(TrainHelper):
             "--increase_batch",
             help="Increase batch if more than one 'bad' epoch",
             action="store_true",
-            default=True
+            default=False
         )
         self.cli.add_argument(
             "--decay_learning_rate",
@@ -49,7 +61,7 @@ class CNNHelper(TrainHelper):
         )
         self.cli.add_argument(
             "--loss_function",
-            help="Loss function to use during training",
+            help="Loss function to use for training (from models/loss_functions.py)",
             type=str,
             default="weighted_crossentropy"
         ) 
@@ -59,7 +71,32 @@ class CNNHelper(TrainHelper):
             type=int,
             default=3
         ) 
+        self.cli.add_argument(
+            "--extra_features",
+            help="Space-separated list of extra features to pass to model",
+            type=str,
+            nargs="*"
+        ) 
         self.parse_cli()
+
+    def shuffle_patients(self, random_seed=0):
+        # Calculate number of training/testing slices
+        n_train = int(self.train_frac*float(len(self.patients)))
+        # Separate augmented and non-augmented data
+        pattern = re.compile("^[A-Z][a-z]+_ser_\d+$")
+        augmented_data = [k for k in self.patients if not pattern.match(k)]
+        non_augmented_data = [k for k in self.patients if pattern.match(k)]
+        # Shuffle patients, fixing random seed for reproducibility
+        # Note: for more rigorous comparisons we should do k-fold validation 
+        # with multiple different test/train splits
+        random.seed(random_seed)
+        random.shuffle(augmented_data)
+        random.shuffle(non_augmented_data)
+        patients_shuffle = augmented_data+non_augmented_data
+        # Distribute training and testing data
+        self.patients_train = patients_shuffle[:n_train]
+        self.patients_test = patients_shuffle[n_train:]
+        return
 
     def load_data(self):
         """
@@ -78,24 +115,37 @@ class CNNHelper(TrainHelper):
         self.patients = list(self.data.keys())
         # Derive/store input shape
         self.input_shape = self.data[self.patients[0]].shape
+        # Derive/store number of extra features
+        self.n_extra_features = 0
+        if self.extra_features:
+            for feature_name in self.extra_features:
+                feature = self.metadata[self.patients[0]][feature_name]
+                if type(feature) == list:
+                    self.n_extra_features += len(feature)
+                else:
+                    self.n_extra_features += 1
         return
 
     def train(self):
         """Train model with early stopping"""
+        training_batch_size = self.training_batch_size
+        validation_batch_size = self.validation_batch_size
         # Initialize data generators
         training_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
-            batch_size=self.training_batch_size,
+            batch_size=training_batch_size,
+            extra_features=self.extra_features
         )
         validation_generator = DataGenerator3D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
-            batch_size=self.validation_batch_size,
+            batch_size=validation_batch_size,
+            extra_features=self.extra_features
         )
         # Write weights to hdf5 each epoch
         checkpoint = keras.callbacks.ModelCheckpoint(self.weights_file)
@@ -104,6 +154,7 @@ class CNNHelper(TrainHelper):
         train_more = True
         epoch_num = 0
         bad_epochs = 0
+        best_loss = 999999.0
         while train_more:
             epoch_num += 1
             if self.verbose:
@@ -113,7 +164,9 @@ class CNNHelper(TrainHelper):
                 training_generator,
                 callbacks=callbacks_list,
                 use_multiprocessing=False,
-                validation_data=validation_generator
+                validation_data=validation_generator,
+                epochs=epoch_num,
+                initial_epoch=epoch_num-1
             )
             # Calculate TPR, FPR, and AUC
             y = []
@@ -134,47 +187,107 @@ class CNNHelper(TrainHelper):
             # Update epoch metrics
             print("Saving epoch metrics")
             self.save_metrics(results.history)
-            # Calculate % change for early stopping
-            val_loss = results.history["val_loss"][0]
-            percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
-            if (val_loss*(1. + self.delta)) < self.best_loss:
-                print("Loss improved by %.2f percent (%.3f -> %.3f)" 
-                      % (percent_change, self.best_loss, val_loss))
-                print("--> continuing for another epoch")
-                self.best_loss = val_loss
-                bad_epochs = 0
-            else:
-                print("Change in loss was %.2f percent (%.3f -> %.3f)" 
-                      % (percent_change, self.best_loss, val_loss)) 
-                print("--> incrementing bad epochs by 1")
-                bad_epochs += 1
-            # Handle dynamic batch size and/or learning rate
-            if ((self.increase_batch or self.decay_learning_rate) 
-                and bad_epochs >= 1): 
-                # Increase batch size (decay learning rate as well?)
-                if self.training_batch_size*4 <= self.max_batch_size:
-                    print("--> Increasing batch size from %d -> %d" 
-                          % (self.training_batch_size, self.training_batch_size*4))
-                    print("--> resetting bad epochs to 0")
-                    print("--> continuing for another epoch")
-                    self.training_batch_size *= 4
-                    training_generator.batch_size = self.training_batch_size
-                    bad_epochs = 0
-            # Check for early stopping
-            if bad_epochs >= self.early_stopping_rounds:
-                print("Number of early stopping rounds (%d) without\
-                      improvement in loss of at least %.2f percent exceeded" 
-                      % (self.early_stopping_rounds, self.delta*100.))
-                print("--> stopping training after %d epochs" 
-                      % (epoch_num))
-                train_more = False
             # Stop training after epoch cap
             if self.max_epochs > 0 and epoch_num >= self.max_epochs:
                 print("Maximum number of training epochs (%d) reached" 
                       % (self.max_epochs))
                 print("--> stopped training")
                 train_more = False
+            if self.no_early_stopping:
+                continue
+            # Calculate % change for early stopping
+            val_loss = results.history["val_loss"][0]
+            percent_change = ((best_loss - val_loss)/val_loss)*100.0
+            if (val_loss*(1. + self.delta)) < best_loss:
+                print("Loss improved by %.2f percent (%.3f -> %.3f)" 
+                      % (percent_change, best_loss, val_loss))
+                print("--> continuing for another epoch")
+                best_loss = val_loss
+                bad_epochs = 0
+            else:
+                print("Change in loss was %.2f percent (%.3f -> %.3f)" 
+                      % (percent_change, best_loss, val_loss)) 
+                print("--> incrementing bad epochs by 1")
+                bad_epochs += 1
+            # Handle dynamic batch size and/or learning rate
+            if ((self.increase_batch or self.decay_learning_rate) 
+                and bad_epochs >= 1): 
+                # Increase batch size (decay learning rate as well?)
+                if training_batch_size*4 <= self.max_batch_size:
+                    print("--> increasing batch size from %d -> %d" 
+                          % (training_batch_size, training_batch_size*4))
+                    print("--> resetting bad epochs to 0")
+                    print("--> continuing for another epoch")
+                    training_batch_size *= 4
+                    training_generator.batch_size = training_batch_size
+                    bad_epochs = 0
+            # Check for early stopping
+            if bad_epochs >= self.early_stopping_rounds:
+                print("Exceeded patience (%d)" % self.early_stopping_rounds)
+                print("--> stopping training after %d epochs" 
+                      % (epoch_num))
+                train_more = False
+
+        self.make_plots()
         return
+
+    def make_plots(self):
+        print("Making assessment plots")
+        training = self.cur_training
+        plot_dir = self.out_dir+"plots/"
+        # Loss timeseriese
+        df = pandas.DataFrame(self.metrics)
+        df = df[df.training == training].reset_index(drop=True)
+        # Plot
+        fig, axes = plt.subplots()
+        plt.plot(df.loss, label="training")
+        plt.plot(df.val_loss, label="validation")
+        # Plot formatting
+        plt.legend()
+        plt.xlabel("Epochs")
+        plt.ylabel("Weighted Crossentropy")
+        plt.title("Loss Timeseries")
+        plt.savefig(plot_dir+"loss_timeseries_"+str(training)+".png")
+        plt.close(fig)
+        # Get false/true positive rates, AUC
+        validation_generator = DataGenerator3D(
+            data=self.data,
+            metadata=self.metadata,
+            input_shape=self.input_shape,
+            patients=self.patients_test,
+            batch_size=4,
+            extra_features=self.extra_features
+        )
+        labels = []
+        preds = []
+        for i in range(len(validation_generator)):
+            # Get data, label, and prediction
+            X, y = validation_generator.__getitem__(0)
+            pred = self.model.predict(X)
+            # Add to list
+            labels.append(y)
+            if i == 0:
+                preds = pred
+            else:
+                preds = numpy.concatenate([preds, pred])
+        labels = numpy.array(labels)
+        preds = numpy.array(preds)
+        # Get false/true positive rates, AUC
+        fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
+        # ROC Curve
+        fig, axes = plt.subplots()
+        axes.plot(fprs, tprs, label="%s [AUC: %.3f]" % (self.tag, auc))
+        # Formatting
+        plt.xlim([-0.05,1.05])
+        plt.ylim([-0.05,1.05])
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.legend(loc="lower right")
+        plt.savefig(plot_dir+"roc_curve_"+str(training)+".png")
+        plt.close(fig)
+
+        return
+        
 
 if __name__ == "__main__":
     # Initialize helper
@@ -182,9 +295,10 @@ if __name__ == "__main__":
     # Initialize model
     cnn3D_config = {
         "input_shape": cnn_helper.input_shape,
+        "n_extra_features": cnn_helper.n_extra_features,
         "dropout": 0.25,
         "batch_norm": False,
-        "learning_rate": 0.00005,
+        "learning_rate": 0.0000005,
         "bce_alpha": cnn_helper.bce_alpha,
         "dice_smooth": cnn_helper.dice_smooth,
         "loss_function": cnn_helper.loss_function 

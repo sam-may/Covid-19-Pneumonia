@@ -2,41 +2,12 @@ import numpy
 from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-
-def hist_1D(data, bins, name, title="", xlabel="", fig=None, save=True, 
-            tag=None):
-    # Plot
-    if not fig:
-        fig = plt.figure()
-    else:
-        plt.figure(fig.number)
-    plt.hist(data, bins=bins, alpha=0.4, label=tag)
-    # Formatting
-    plt.title(title, fontsize=16)
-    plt.xlabel(xlabel, fontsize=16)
-    plt.ylabel("Counts", fontsize=16)
-    plt.legend()
-    # Save and close
-    if save:
-        plt.savefig(name)
-        plt.close(fig)
-
-    return
-
-def scale_image(image):
-    """Normalize image pixel values to range from 0 to 1"""
-    image = numpy.array(image)
-
-    min_val = numpy.amin(image)
-    image += -min_val
-
-    max_val = numpy.amax(image)
-    image *= 1./max_val
-    return image
+from .utils import *
 
 def image_truth_plot(image, truth, name, fs=6, fig=None, save=True):
     if not fig:
         fig = plt.figure()
+
     ax = fig.add_subplot(131)
     image_scaled = scale_image(image)
     plt.imshow(image_scaled, cmap='gray')
@@ -61,26 +32,6 @@ def image_truth_plot(image, truth, name, fs=6, fig=None, save=True):
         plt.close(fig)
 
     return fig
-
-def transparent_cmap(cmap, N=255):
-    """Copy colormap and set alpha values"""
-    mycmap = cmap
-    mycmap._init()
-    mycmap._lut[:,-1] = numpy.linspace(0, 0.8, N+4)
-    return mycmap
-
-def make_heatmap(pred, divergent_colormap=False):
-    w, h = pred.shape
-    x, y = numpy.mgrid[0:w, 0:h]
-
-    if not divergent_colormap:
-        cmap = transparent_cmap(plt.cm.cool)
-        levels = numpy.linspace(0, 1, 15)
-    else:
-        cmap = plt.cm.bwr
-        levels = numpy.linspace(-1, 1, 15)
-
-    return x, y, cmap, levels
 
 def image_truth_pred_plot(image, truth, pred, name, title=None, fs=6, fig=None, save=True):
     if not fig:
@@ -158,45 +109,3 @@ def image_truth_pred_plot(image, truth, pred, name, title=None, fs=6, fig=None, 
         plt.close(fig)
 
     return fig
-
-def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name, fig=None,
-             save=True, tag=None):
-    if not fig:
-        fig, axes = plt.subplots()
-    else:
-        axes = fig.axes[0]
-    axes.yaxis.set_ticks_position('both')
-    axes.grid(True)
-    axes.plot(
-        fpr_mean, 
-        tpr_mean,
-        # color='blue', 
-        label="%s [AUC: %.3f +/- %.3f]" % (tag, auc, auc_std)
-    )
-    axes.fill_between(
-        fpr_mean,
-        tpr_mean - (tpr_std/2.),
-        tpr_mean + (tpr_std/2.),
-        # color='blue',
-        alpha=0.25, label=r'$\pm 1\sigma$'
-    )
-    plt.xlim([-0.05,1.05])
-    plt.ylim([-0.05,1.05])
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.legend(loc="lower right")
-    if save:
-        plt.savefig(name)
-        plt.close(fig)
-
-    return
-   
-def calc_auc(y, pred, interp=1000):
-    fpr, tpr, thresh = roc_curve(y, pred)
-
-    fpr_interp = numpy.linspace(0, 1, interp)
-    tpr_interp = numpy.interp(fpr_interp, fpr, tpr)
-
-    auc_ = auc(fpr, tpr)
-
-    return fpr_interp, tpr_interp, auc_ 
