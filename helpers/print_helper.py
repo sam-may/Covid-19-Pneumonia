@@ -18,5 +18,5 @@ def print(content):
         caller_name = class_name+"."+func_name
     elif func_name != "<module>":
         caller_name = func_name
-    __builtin__.print("["+caller_name+"] "+content)
+    __builtin__.print("["+caller_name+"] "+str(content))
     return
