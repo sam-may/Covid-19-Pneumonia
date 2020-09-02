@@ -82,8 +82,6 @@ class TrainHelper():
         self.cli.parse_args(namespace=self)
         # Load/calculate various training parameters
         self.load_data()
-        # Set trackers
-        self.best_loss = 999999.0
         # Initialize directory to hold output files
         self.out_dir = "trained_models/"+self.tag+"/"
         # Initialize weights file, updated each epoch
@@ -93,7 +91,7 @@ class TrainHelper():
                              + "_weights_{epoch:02d}-{val_loss:.2f}.hdf5")
         # Initialize metrics
         self.metrics = []
-        self.metrics_file = self.out_dir+self.tag+"_metrics.pickle"
+        self.metrics_pickle = self.out_dir+self.tag+"_metrics.pickle"
         # Initialize results object, written at end of training
         self.summary = {
             "train_params": vars(self.cli.parse_args()),
@@ -140,19 +138,23 @@ class TrainHelper():
         # Store model config and model
         self.summary["model_config"] = model_config
         self.model = model
+        initial_weights = model.get_weights()
         # Set up directories
         organized = self.organize()
         if not organized:
             return
         # Run training
+        self.cur_training = 0
         if self.n_trainings > 1:
             # One process running several trainings
             for i in range(self.n_trainings):
+                self.model.set_weights(initial_weights)
                 self.random_seed = i
                 self.shuffle_patients(random_seed=i)
                 self.summary["patients_test"].append(self.patients_test)
                 self.summary["random_seeds"].append(self.random_seed)
                 self.train()
+                self.cur_training += 1
         else:
             # One process running a single training
             self.shuffle_patients(random_seed=self.random_seed)
@@ -166,7 +168,10 @@ class TrainHelper():
     def save_metrics(self, epoch_metrics):
         if type(epoch_metrics) != dict:
             raise TypeError
-        df_row = {"random_seed": self.random_seed}
+        df_row = {
+            "training": self.cur_training,
+            "random_seed": self.random_seed
+        }
         for key, value in epoch_metrics.items():
             if type(value) == list and len(value) == 1:
                 df_row[key] = value[0]
@@ -204,5 +209,5 @@ class TrainHelper():
         with open(self.summary_file, "w") as f_out:
             json.dump(self.summary, f_out, indent=4, sort_keys=True)
         # Write metrics dataframe to pickle file
-        pandas.DataFrame(self.metrics).to_pickle(self.metrics_file)
+        pandas.DataFrame(self.metrics).to_pickle(self.metrics_pickle)
         return
