@@ -241,7 +241,7 @@ class NodulesPrepper():
         bound_mask = ndimage.binary_fill_holes(bound_mask).astype(int)
         # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
-        # Volumetric metadata
+        # Compute volumetric metadata
         bound_M = float(np.sum(bound_mask))
         nodule_volume = np.sum(ct_mask > 0)*x_spacing*y_spacing*z_spacing
         patient_metadata = {
@@ -254,14 +254,14 @@ class NodulesPrepper():
             "exceeds_volume": int(M > bound_M),
             "rotation": rotation
         }
+        # Format patient name for output
         out_name = patient
         if rotation != 0:
             out_name += "_rot_%d" % rotation
-        self.add_metadata(out_name, patient_metadata)
         # Close HDF5 files
         scan_data.close()
         mask_data.close()
-        return bound_stack, out_name
+        return bound_stack, out_name, patient_metadata
 
     def process(self):
         """Process data for all patients in annotated dataset"""
@@ -285,12 +285,15 @@ class NodulesPrepper():
                 results = pool.starmap(self.process_patient, args)
                 # Write to output hdf5 file
                 for result in results:
+                    if not type(result) == tuple:
+                        continue
                     # Unpack
-                    bound_stack, out_name = result
+                    bound_stack, out_name, patient_metadata = result
                     # Write
                     if np.any(bound_stack):
                         output_data.create_dataset(out_name, data=bound_stack)
                         print("Wrote %s to %s" % (out_name, self.output_hdf5))
+                        self.add_metadata(out_name, patient_metadata)
                 # Wrap up batch
                 jobs_processed += n_workers
                 pool.close()
