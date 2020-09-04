@@ -107,13 +107,15 @@ class UNETHelper(TrainHelper):
 
     def train(self):
         """Train model with early stopping"""
+        training_batch_size = self.training_batch_size
+        validation_batch_size = self.validation_batch_size
         # Initialize data generators
         training_generator = DataGenerator2p5D(
             data=self.data,
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_train,
-            batch_size=self.training_batch_size,
+            batch_size=training_batch_size,
             extra_slice_step=self.extra_slice_step
         )
         validation_generator = DataGenerator2p5D(
@@ -121,7 +123,7 @@ class UNETHelper(TrainHelper):
             metadata=self.metadata,
             input_shape=self.input_shape,
             patients=self.patients_test,
-            batch_size=self.validation_batch_size,
+            batch_size=validation_batch_size,
             extra_slice_step=self.extra_slice_step
         )
         # Write weights to hdf5 each epoch
@@ -131,6 +133,7 @@ class UNETHelper(TrainHelper):
         train_more = True
         epoch_num = 0
         bad_epochs = 0
+        best_loss = 999999.0
         while train_more:
             epoch_num += 1
             if self.verbose:
@@ -165,29 +168,29 @@ class UNETHelper(TrainHelper):
             self.save_metrics(results.history)
             # Calculate % change for early stopping
             val_loss = results.history["val_loss"][0]
-            percent_change = ((self.best_loss - val_loss)/val_loss)*100.0
-            if (val_loss*(1. + self.delta)) < self.best_loss:
+            percent_change = ((best_loss - val_loss)/val_loss)*100.0
+            if (val_loss*(1. + self.delta)) < best_loss:
                 print("Loss improved by %.2f percent (%.3f -> %.3f)" 
-                      % (percent_change, self.best_loss, val_loss))
+                      % (percent_change, best_loss, val_loss))
                 print("--> continuing for another epoch")
-                self.best_loss = val_loss
+                best_loss = val_loss
                 bad_epochs = 0
             else:
                 print("Change in loss was %.2f percent (%.3f -> %.3f)" 
-                      % (percent_change, self.best_loss, val_loss)) 
+                      % (percent_change, best_loss, val_loss)) 
                 print("--> incrementing bad epochs by 1")
                 bad_epochs += 1
             # Handle dynamic batch size and/or learning rate
             if ((self.increase_batch or self.decay_learning_rate) 
                 and bad_epochs >= 1): 
                 # Increase batch size (decay learning rate as well?)
-                if self.training_batch_size*4 <= self.max_batch_size:
+                if training_batch_size*4 <= self.max_batch_size:
                     print("--> Increasing batch size from %d -> %d" 
-                          % (self.training_batch_size, self.training_batch_size*4))
+                          % (training_batch_size, training_batch_size*4))
                     print("--> resetting bad epochs to 0")
                     print("--> continuing for another epoch")
-                    self.training_batch_size *= 4
-                    training_generator.batch_size = self.training_batch_size
+                    training_batch_size *= 4
+                    training_generator.batch_size = training_batch_size
                     bad_epochs = 0
             # Check for early stopping
             if bad_epochs >= self.early_stopping_rounds:
