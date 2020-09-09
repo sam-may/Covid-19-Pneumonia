@@ -1,4 +1,5 @@
 import numpy
+import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 
 def scale_image(image):

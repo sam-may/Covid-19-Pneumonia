@@ -149,7 +149,7 @@ class PlotHelper(ModelHelper):
 
             self.tprs.append(tpr)
             self.fprs.append(fpr)
-            self.auc.append(auc)
+            self.aucs.append(auc)
 
         tpr_mean = numpy.mean(self.tprs, axis=0)
         fpr_mean = numpy.mean(self.fprs, axis=0)
@@ -234,7 +234,7 @@ class PlotHelper(ModelHelper):
 
 if __name__ == "__main__":
     # Initialize comparison framework
-    compare_helper = CompareHelper()
+    compare_helper = CompareHelper(data_hdf5 = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.hdf5", metadata_json = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.json")
     # Common slices to plot
     common_slices = [
         ("patient18", 154),
