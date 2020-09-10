@@ -60,23 +60,6 @@ class DataGenerator3D(keras.utils.Sequence):
                 reshape=False,
                 order=1
             )
-            polar_rotation = random.randint(0, 359)
-            coin_toss = random.randint(0, 1)
-            polar_plane = (1, 2) if coin_toss else (2, 1)
-            ct_mask = ndimage.rotate(
-                ct_mask, 
-                polar_rotation, 
-                axes=polar_plane,
-                reshape=False,
-                order=1
-            )
-            ct_scan = ndimage.rotate(
-                ct_scan, 
-                polar_rotation, 
-                axes=polar_plane,
-                reshape=False,
-                order=1
-            )
         # Trim bounding box to proper input dimensions
         bound_x, bound_y, bound_z, _ = self.input_shape
         target_x, target_y, target_z = self.input_reshape
