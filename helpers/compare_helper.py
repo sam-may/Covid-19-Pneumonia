@@ -7,12 +7,13 @@ from datetime import datetime as dt
 from .print_helper import print
 
 class CompareHelper():
-    def __init__(self):
+    def __init__(self, data_hdf5=None, metadata_json=None):
         self.model_helpers = []
         self.n_models = 0
         self.model_tags = []
-        self.data_hdf5 = None
-        self.metadata_json = None
+        self.data = h5py.File(data_hdf5, "r")
+        with open(metadata_json, "r") as f_in:
+            self.metadata = json.load(f_in)
         self.out_dir = ""
 
     def add_models(self, model_helpers):
@@ -20,6 +21,7 @@ class CompareHelper():
             self.add_model(model_helper)
 
     def add_model(self, model_helper):
+        """
         if not self.data_hdf5:
             # Load data and metadata
             self.data_hdf5 = model_helper.data_hdf5
@@ -36,6 +38,7 @@ class CompareHelper():
             print("Model %s already loaded" % model_helper.tag)
             print("--> skipping")
             return
+        """
         # Store model
         print("Loaded model %s" % model_helper.tag)
         model_helper.assign_data(self.data, self.metadata)
