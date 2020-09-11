@@ -1,9 +1,9 @@
 python train_cnn3D.py \
---data_hdf5="/mnt/data/LungNodules/features.hdf5" \
---metadata_json="/mnt/data/LungNodules/metadata.json" \
---tag="nodulesCNN3D_extra-features_test" \
---max_epochs=1 \
---n_trainings=1 \
+--data_hdf5="/mnt/data/LungNodules/features_rotatable.hdf5" \
+--metadata_json="/mnt/data/LungNodules/features_rotatable_metadata.json" \
+--tag="nodulesCNN3D_extra-features_azim-rotations" \
+--max_epochs=100 \
+--n_trainings=5 \
 --training_batch_size=16 \
 --validation_batch_size=16 \
 --max_batch_size=64 \
@@ -12,4 +12,4 @@ python train_cnn3D.py \
 --train_frac=0.7 \
 --loss_function="weighted_crossentropy" \
 --extra_features center_of_mass_norm nodule_volume_norm \
---no_early_stopping
+--do_rotations
