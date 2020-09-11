@@ -215,65 +215,6 @@ class CNNHelper(TrainHelper):
         self.make_plots()
         return
 
-    def make_plots(self):
-        print("Making assessment plots")
-        training = self.cur_training
-        plot_dir = self.out_dir+"plots/"
-        # Loss timeseriese
-        df = pandas.DataFrame(self.metrics)
-        df = df[df.training == training].reset_index(drop=True)
-        # Plot
-        fig, axes = plt.subplots()
-        plt.plot(df.loss, label="training")
-        plt.plot(df.val_loss, label="validation")
-        # Plot formatting
-        plt.legend()
-        plt.xlabel("Epochs")
-        plt.ylabel("Weighted Crossentropy")
-        plt.title("Loss Timeseries")
-        plt.savefig(plot_dir+"loss_timeseries_"+str(training)+".png")
-        plt.close(fig)
-        # Get false/true positive rates, AUC
-        validation_generator = DataGenerator3D(
-            data=self.data,
-            metadata=self.metadata,
-            input_shape=self.input_shape,
-            patients=self.patients_test,
-            batch_size=4,
-            input_reshape=(64, 64, 64),
-            extra_features=self.extra_features
-        )
-        labels = []
-        preds = []
-        for i in range(len(validation_generator)):
-            # Get data, label, and prediction
-            X, y = validation_generator.__getitem__(0)
-            pred = self.model.predict(X)
-            # Add to list
-            labels.append(y)
-            if i == 0:
-                preds = pred
-            else:
-                preds = numpy.concatenate([preds, pred])
-        labels = numpy.array(labels)
-        preds = numpy.array(preds)
-        # Get false/true positive rates, AUC
-        fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
-        # ROC Curve
-        fig, axes = plt.subplots()
-        axes.plot(fprs, tprs, label="%s [AUC: %.3f]" % (self.tag, auc))
-        # Formatting
-        plt.xlim([-0.05,1.05])
-        plt.ylim([-0.05,1.05])
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.legend(loc="lower right")
-        plt.savefig(plot_dir+"roc_curve_"+str(training)+".png")
-        plt.close(fig)
-
-        return
-        
-
 if __name__ == "__main__":
     # Initialize helper
     cnn_helper = CNNHelper()
@@ -283,7 +224,7 @@ if __name__ == "__main__":
         "n_extra_features": cnn_helper.n_extra_features,
         "dropout": 0.25,
         "batch_norm": False,
-        "learning_rate": 0.0000005,
+        "learning_rate": 0.00005,
         "bce_alpha": cnn_helper.bce_alpha,
         "dice_smooth": cnn_helper.dice_smooth,
         "loss_function": cnn_helper.loss_function 
