@@ -77,6 +77,12 @@ class CNNHelper(TrainHelper):
             type=str,
             nargs="*"
         ) 
+        self.cli.add_argument(
+            "--do_rotations",
+            help="Allow random rotations on training data",
+            action="store_true",
+            default=False
+        )
         self.parse_cli()
 
     def load_data(self):
@@ -120,7 +126,7 @@ class CNNHelper(TrainHelper):
             batch_size=training_batch_size,
             input_reshape=(64, 64, 64),
             extra_features=self.extra_features,
-            do_rotations=True
+            do_rotations=self.do_rotations
         )
         validation_generator = DataGenerator3D(
             data=self.data,
