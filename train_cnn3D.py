@@ -218,7 +218,6 @@ class CNNHelper(TrainHelper):
                       % (epoch_num))
                 train_more = False
 
-        self.make_plots()
         return
 
 if __name__ == "__main__":
