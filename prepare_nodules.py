@@ -5,7 +5,7 @@ import json
 import random
 import argparse
 from multiprocessing import Pool
-from math import ceil
+from math import ceil, sqrt
 from scipy import ndimage
 import numpy as np
 import matplotlib.pyplot as plt
@@ -43,25 +43,14 @@ class NodulesPrepper():
             default=""
         )
         cli.add_argument(
-            "--rotations", 
-            help="(optional) number of axial rotations per patient", 
-            type=int, 
-            default=3
-        )
-        cli.add_argument(
             "--max_processes", 
             help="(optional) maximum number of processes to run", 
             type=int, 
-            default=0
+            default=3
         )
         # Load CLI args into namespace
         cli.parse_args(namespace=self)
         self.input_dir = os.path.dirname(self.scan_hdf5)+"/"
-        if self.max_processes == 0:
-            print("Setting max processes to %d" % (self.rotations+1))
-            self.max_processes = self.rotations+1
-        elif self.max_processes < 0:
-            raise ValueError("Can't have a negative number of processes!")
         # Load kwargs
         self.bounding_volume = bounding_volume
         self.physical_volume = physical_volume
@@ -136,11 +125,12 @@ class NodulesPrepper():
             json.dump(self.metadata, f_out, indent=4)
         return
 
-    def process_patient(self, patient, rotation):
+    def process_patient(self, patient):
         """
         Isolate annotated lung nodule within a given bounding volume, return 
         save multichannel volume (scan, mask)
         """
+        print("Processing {}".format(patient))
         scan_data = h5py.File(self.scan_hdf5, "r")
         mask_data = h5py.File(self.mask_hdf5, "r")
         # DICOM metadata
@@ -164,11 +154,6 @@ class NodulesPrepper():
         # Load mask directly to memory
         ct_mask = np.array(mask_data.get(patient))
         ct_mask = ct_mask[:,:,:,0]
-        # Rotate the CT volume
-        if rotation != 0:
-            print("Rotating by %d degrees" % rotation)
-            ct_mask = ndimage.rotate(ct_mask, rotation, reshape=False)
-            ct_scan = ndimage.rotate(ct_scan, rotation, reshape=False)
         # Get COM of nodule to the nearest pixel
         M = float(np.sum(ct_mask)) # 'mass' of nodule
         if M == 0:
@@ -233,12 +218,12 @@ class NodulesPrepper():
         scale_x = target_x/float(bound_x//2*2)
         scale_y = target_y/float(bound_y//2*2)
         scale_z = target_z/float(bound_z//2*2)
-        bound_scan = ndimage.zoom(bound_scan, (scale_x, scale_y, scale_z))
-        bound_mask = ndimage.zoom(bound_mask, (scale_x, scale_y, scale_z))
+        scale_factors = (scale_x, scale_y, scale_z)
+        bound_scan = ndimage.zoom(bound_scan, scale_factors, order=1)
+        bound_mask = ndimage.zoom(bound_mask, scale_factors, order=1)
         # Remove interpolation artifacts from mask
-        bound_mask = np.abs(np.round(bound_mask))
+        bound_mask = np.abs(bound_mask)
         bound_mask[bound_mask > 0] = 1
-        bound_mask = ndimage.binary_fill_holes(bound_mask).astype(int)
         # Stack inputs
         bound_stack = np.stack([bound_scan, bound_mask], axis=-1)
         # Compute volumetric metadata
@@ -252,51 +237,44 @@ class NodulesPrepper():
             ],
             "nodule_volume": nodule_volume,
             "exceeds_volume": int(M > bound_M),
-            "rotation": rotation
         }
-        # Format patient name for output
-        out_name = patient
-        if rotation != 0:
-            out_name += "_rot_%d" % rotation
         # Close HDF5 files
         scan_data.close()
         mask_data.close()
-        return bound_stack, out_name, patient_metadata
+        return bound_stack, patient, patient_metadata
 
     def process(self):
         """Process data for all patients in annotated dataset"""
         print("Parsing patients")
         output_data = h5py.File(self.output_hdf5, "w")
-        n_jobs = self.rotations+1 # n_jobs == len(angles)
+        n_jobs = len(self.patients)
         n_batches = n_jobs//self.max_processes
-        for patient in self.patients:
-            print("Processing {}".format(patient))
-            jobs_processed = 0
-            angles = [0] + random.sample(range(10, 350), self.rotations)
-            for batch in range(n_batches):
-                n_workers = 0
-                if jobs_processed + self.max_processes <= n_jobs:
-                    n_workers = self.max_processes
-                else:
-                    n_workers = n_jobs - jobs_processed
-                batch_angles = angles[jobs_processed:jobs_processed+n_workers]
-                pool = Pool(n_workers)
-                args = [(patient, rotation) for rotation in batch_angles]
-                results = pool.starmap(self.process_patient, args)
-                # Write to output hdf5 file
-                for result in results:
-                    if not type(result) == tuple:
-                        continue
-                    # Unpack
-                    bound_stack, out_name, patient_metadata = result
-                    # Write
-                    if np.any(bound_stack):
-                        output_data.create_dataset(out_name, data=bound_stack)
-                        print("Wrote %s to %s" % (out_name, self.output_hdf5))
-                        self.add_metadata(out_name, patient_metadata)
-                # Wrap up batch
-                jobs_processed += n_workers
-                pool.close()
+        n_jobs_processed = 0
+        for b in range(n_batches):
+            # Determine how many workers to call
+            n_workers = 0
+            if n_jobs_processed + self.max_processes <= n_jobs:
+                n_workers = self.max_processes
+            else:
+                n_workers = n_jobs - n_jobs_processed
+            # Run jobs and wait for results
+            batch = self.patients[n_jobs_processed:n_jobs_processed+n_workers]
+            pool = Pool(n_workers)
+            results = pool.map(self.process_patient, batch)
+            # Write to output hdf5 file
+            for result in results:
+                if not type(result) == tuple:
+                    continue
+                # Unpack
+                bound_stack, patient, patient_metadata = result
+                # Write
+                if np.any(bound_stack):
+                    output_data.create_dataset(patient, data=bound_stack)
+                    print("Wrote %s to %s" % (patient, self.output_hdf5))
+                    self.add_metadata(patient, patient_metadata)
+            # Wrap up batch
+            n_jobs_processed += n_workers
+            pool.close()
         print("Wrapping up")
         self.write_metadata()
         output_data.close()
@@ -385,8 +363,9 @@ class NodulesPrepper():
             
 
 if __name__ == "__main__":
+    bound_l = ceil(64*sqrt(2))
     prepper = NodulesPrepper(
-        bounding_volume=(64,64,64),
+        bounding_volume=(bound_l,bound_l,bound_l),
         physical_volume=(50,50,50),
         patient_regex="^[A-Z][a-z]+_ser_\d+$"
     )

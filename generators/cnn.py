@@ -1,24 +1,25 @@
 import numpy
 import random
 import tensorflow.keras as keras
+from scipy import ndimage
 from helpers.print_helper import print
 
 class DataGenerator3D(keras.utils.Sequence):
     def __init__(self, data, metadata, input_shape, patients, batch_size, 
-                 no_repeats=True, shuffle_patients=False, extra_features=[],
-                 verbose=False):
+                 input_reshape=None, no_repeats=True, extra_features=[],
+                 do_rotations=False, verbose=False):
         self.data = data
         self.metadata = metadata
         self.input_shape = input_shape
+        self.input_reshape = input_reshape if input_reshape else input_shape
         self.patients = patients
         self.batch_size = batch_size
         self.no_repeats = no_repeats
         self.extra_features = extra_features
+        self.do_rotations = do_rotations
         self.verbose = verbose
         # Random patient selection
         self.cur_patient = 0
-        if shuffle_patients:
-            random.shuffle(self.patients)
 
     def __len__(self):
         return len(self.patients)//self.batch_size
@@ -41,6 +42,38 @@ class DataGenerator3D(keras.utils.Sequence):
     def on_epoch_end(self):
         self.cur_patient = 0
 
+    def augment(self, X):
+        ct_scan = X[:,:,:,0]
+        ct_mask = X[:,:,:,1]
+        # Perform random rotations
+        if self.do_rotations:
+            azimuthal_rotation = random.randint(0,359)
+            ct_mask = ndimage.rotate(
+                ct_mask, 
+                azimuthal_rotation, 
+                reshape=False,
+                order=1
+            )
+            ct_scan = ndimage.rotate(
+                ct_scan, 
+                azimuthal_rotation, 
+                reshape=False,
+                order=1
+            )
+        # Trim bounding box to proper input dimensions
+        bound_x, bound_y, bound_z, _ = self.input_shape
+        target_x, target_y, target_z = self.input_reshape
+        x_ = (bound_x - target_x)//2
+        y_ = (bound_y - target_y)//2
+        z_ = (bound_z - target_z)//2
+        _x = target_x + x_
+        _y = target_y + y_
+        _z = target_z + z_
+        ct_scan = ct_scan[x_:_x, y_:_y, z_:_z]
+        ct_mask = ct_mask[x_:_x, y_:_y, z_:_z]
+        X = numpy.stack([ct_scan, ct_mask], axis=-1)
+        return X
+
     def get_nodule(self, patient=None):
         """
         Retrieve a nodule (M,M,N) bounding volume and binary label
@@ -52,7 +85,7 @@ class DataGenerator3D(keras.utils.Sequence):
             else:
                 patient = random.choice(self.patients)
         # Input
-        X = self.data.get(patient)
+        X = self.augment(self.data.get(patient))
         # Extra features
         x = []
         if self.extra_features:

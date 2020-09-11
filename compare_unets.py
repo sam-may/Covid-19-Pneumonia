@@ -128,75 +128,6 @@ class PlotHelper(ModelHelper):
 
         return
 
-    def plot_roc_curve(self, fig=None):
-        """
-        Calculate tpr, fpr, auc and uncertainties.
-        Uncertainties are calculated only if at least 3
-        different test/train splits are saved in the results.
-        """
-
-        n_trainings = len(numpy.unique(self.metrics_df.random_seed.to_numpy()))
-        plot_unc = n_trainings >= 3
-
-        self.tprs = []
-        self.fprs = []
-        self.aucs = []
-
-        for i in range(n_trainings):
-            tpr = self.metrics_df.tpr[self.metrics_df.random_seed == i].to_numpy()[-1]
-            fpr = self.metrics_df.fpr[self.metrics_df.random_seed == i].to_numpy()[-1]
-            auc = self.metrics_df.auc[self.metrics_df.random_seed == i].to_numpy()[-1]
-
-            self.tprs.append(tpr)
-            self.fprs.append(fpr)
-            self.aucs.append(auc)
-
-        tpr_mean = numpy.mean(self.tprs, axis=0)
-        fpr_mean = numpy.mean(self.fprs, axis=0)
-        auc = numpy.mean(self.aucs)
-
-        if plot_unc:
-            tpr_std = numpy.std(self.tprs, axis=0)
-            fpr_std = numpy.std(self.fprs, axis=0)
-            auc_std = numpy.std(self.aucs)
-        else:
-            tpr_std = numpy.zeros_like(tpr_mean)
-            fpr_std = numpy.zeros_like(fpr_mean)
-            auc_std = 0.
-
-        general.roc_plot(
-            fpr_mean,
-            fpr_std,
-            tpr_mean,
-            tpr_std,
-            auc,
-            auc_std,
-            self.plot_dir+self.tag+"_roc_curve.pdf",
-            fig=fig,
-            save=(not fig),
-            tag=self.tag
-        )
- 
-    def plot_learning_curve(self, fig=None):
-        save = (not fig)
-        if not fig:
-            fig, axes = plt.subplots()
-        else:
-            plt.figure(fig.number)
-            axes = fig.axes[0]
-        # Plot
-        dice_loss = self.metrics_df_0.calc_dice_loss
-        axes.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
-        # Formatting
-        plt.xlabel("Epoch")
-        plt.ylabel("1 - Dice Coefficient")
-        plt.legend()
-        if save:
-            plt.savefig(self.plot_dir+self.tag+"_learning_curve.pdf")
-            plt.close(fig)
-
-        return
-
     def side_by_side_plot(self, patient=None, slice_idx=None, out_path=None): 
         """
         Make plots of (orig|truth|pred)\\(orig+truth|orig+pred|original+(pred-truth))
@@ -234,7 +165,11 @@ class PlotHelper(ModelHelper):
 
 if __name__ == "__main__":
     # Initialize comparison framework
-    compare_helper = CompareHelper(data_hdf5 = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.hdf5", metadata_json = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/features.json")
+    basedir = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256" 
+    compare_helper = CompareHelper(
+        data_hdf5=basedir+"features.hdf5", 
+        metadata_json=basedir+"features.json"
+    )
     # Common slices to plot
     common_slices = [
         ("patient18", 154),

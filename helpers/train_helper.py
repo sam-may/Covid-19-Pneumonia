@@ -85,13 +85,20 @@ class TrainHelper():
         # Initialize directory to hold output files
         self.out_dir = "trained_models/"+self.tag+"/"
         # Initialize weights file, updated each epoch
-        self.weights_file = (self.out_dir
-                             + "weights/"
-                             + self.tag
-                             + "_weights_{epoch:02d}-{val_loss:.2f}.hdf5")
+        if self.n_trainings == 1:
+            self.weights_file = (self.out_dir
+                                 + "weights/weights"
+                                 + "_epoch-{epoch:02d}"
+                                 + "_loss-{val_loss:.2f}.hdf5")
+        else:
+            self.weights_file_form = (self.out_dir
+                                      + "weights/weights"
+                                      + "_training-%02d"
+                                      + "_epoch-{epoch:02d}"
+                                      + "_loss-{val_loss:.2f}.hdf5")
         # Initialize metrics
         self.metrics = []
-        self.metrics_pickle = self.out_dir+self.tag+"_metrics.pickle"
+        self.metrics_pickle = self.out_dir+"metrics.pickle"
         # Initialize results object, written at end of training
         self.summary = {
             "train_params": vars(self.cli.parse_args()),
@@ -100,7 +107,7 @@ class TrainHelper():
             "random_seeds": []
         }
         self.summary["train_params"]["input_shape"] = self.input_shape
-        self.summary_file = self.out_dir+self.tag+"_summary.json"
+        self.summary_file = self.out_dir+"summary.json"
         return
 
     def load_data(self):
@@ -148,6 +155,7 @@ class TrainHelper():
         if self.n_trainings > 1:
             # One process running several trainings
             for i in range(self.n_trainings):
+                self.weights_file = self.weights_file_form % i
                 self.model.set_weights(initial_weights)
                 self.random_seed = i
                 self.shuffle_patients(random_seed=i)

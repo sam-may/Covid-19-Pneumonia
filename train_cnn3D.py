@@ -77,26 +77,13 @@ class CNNHelper(TrainHelper):
             type=str,
             nargs="*"
         ) 
+        self.cli.add_argument(
+            "--do_rotations",
+            help="Allow random rotations on training data",
+            action="store_true",
+            default=False
+        )
         self.parse_cli()
-
-    def shuffle_patients(self, random_seed=0):
-        # Calculate number of training/testing slices
-        n_train = int(self.train_frac*float(len(self.patients)))
-        # Separate augmented and non-augmented data
-        pattern = re.compile("^[A-Z][a-z]+_ser_\d+$")
-        augmented_data = [k for k in self.patients if not pattern.match(k)]
-        non_augmented_data = [k for k in self.patients if pattern.match(k)]
-        # Shuffle patients, fixing random seed for reproducibility
-        # Note: for more rigorous comparisons we should do k-fold validation 
-        # with multiple different test/train splits
-        random.seed(random_seed)
-        random.shuffle(augmented_data)
-        random.shuffle(non_augmented_data)
-        patients_shuffle = augmented_data+non_augmented_data
-        # Distribute training and testing data
-        self.patients_train = patients_shuffle[:n_train]
-        self.patients_test = patients_shuffle[n_train:]
-        return
 
     def load_data(self):
         """
@@ -137,7 +124,9 @@ class CNNHelper(TrainHelper):
             input_shape=self.input_shape,
             patients=self.patients_train,
             batch_size=training_batch_size,
-            extra_features=self.extra_features
+            input_reshape=(64, 64, 64),
+            extra_features=self.extra_features,
+            do_rotations=self.do_rotations
         )
         validation_generator = DataGenerator3D(
             data=self.data,
@@ -145,6 +134,7 @@ class CNNHelper(TrainHelper):
             input_shape=self.input_shape,
             patients=self.patients_test,
             batch_size=validation_batch_size,
+            input_reshape=(64, 64, 64),
             extra_features=self.extra_features
         )
         # Write weights to hdf5 each epoch
@@ -228,77 +218,18 @@ class CNNHelper(TrainHelper):
                       % (epoch_num))
                 train_more = False
 
-        self.make_plots()
         return
-
-    def make_plots(self):
-        print("Making assessment plots")
-        training = self.cur_training
-        plot_dir = self.out_dir+"plots/"
-        # Loss timeseriese
-        df = pandas.DataFrame(self.metrics)
-        df = df[df.training == training].reset_index(drop=True)
-        # Plot
-        fig, axes = plt.subplots()
-        plt.plot(df.loss, label="training")
-        plt.plot(df.val_loss, label="validation")
-        # Plot formatting
-        plt.legend()
-        plt.xlabel("Epochs")
-        plt.ylabel("Weighted Crossentropy")
-        plt.title("Loss Timeseries")
-        plt.savefig(plot_dir+"loss_timeseries_"+str(training)+".png")
-        plt.close(fig)
-        # Get false/true positive rates, AUC
-        validation_generator = DataGenerator3D(
-            data=self.data,
-            metadata=self.metadata,
-            input_shape=self.input_shape,
-            patients=self.patients_test,
-            batch_size=4,
-            extra_features=self.extra_features
-        )
-        labels = []
-        preds = []
-        for i in range(len(validation_generator)):
-            # Get data, label, and prediction
-            X, y = validation_generator.__getitem__(0)
-            pred = self.model.predict(X)
-            # Add to list
-            labels.append(y)
-            if i == 0:
-                preds = pred
-            else:
-                preds = numpy.concatenate([preds, pred])
-        labels = numpy.array(labels)
-        preds = numpy.array(preds)
-        # Get false/true positive rates, AUC
-        fprs, tprs, auc = calc_auc(labels.flatten(), preds.flatten())
-        # ROC Curve
-        fig, axes = plt.subplots()
-        axes.plot(fprs, tprs, label="%s [AUC: %.3f]" % (self.tag, auc))
-        # Formatting
-        plt.xlim([-0.05,1.05])
-        plt.ylim([-0.05,1.05])
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.legend(loc="lower right")
-        plt.savefig(plot_dir+"roc_curve_"+str(training)+".png")
-        plt.close(fig)
-
-        return
-        
 
 if __name__ == "__main__":
     # Initialize helper
     cnn_helper = CNNHelper()
     # Initialize model
     cnn3D_config = {
-        "input_shape": cnn_helper.input_shape,
+        "input_shape": (64, 64, 64, 2),
         "n_extra_features": cnn_helper.n_extra_features,
         "dropout": 0.25,
         "batch_norm": False,
-        "learning_rate": 0.0000005,
+        "learning_rate": 0.00005,
         "bce_alpha": cnn_helper.bce_alpha,
         "dice_smooth": cnn_helper.dice_smooth,
         "loss_function": cnn_helper.loss_function 
