@@ -127,26 +127,6 @@ class PlotHelper(ModelHelper):
                 )
 
         return
- 
-    def plot_learning_curve(self, fig=None):
-        save = (not fig)
-        if not fig:
-            fig, axes = plt.subplots()
-        else:
-            plt.figure(fig.number)
-            axes = fig.axes[0]
-        # Plot
-        dice_loss = self.metrics_df_0.calc_dice_loss
-        axes.plot(numpy.arange(len(dice_loss)), dice_loss, label=self.tag)
-        # Formatting
-        plt.xlabel("Epoch")
-        plt.ylabel("1 - Dice Coefficient")
-        plt.legend()
-        if save:
-            plt.savefig(self.plot_dir+self.tag+"_learning_curve.pdf")
-            plt.close(fig)
-
-        return
 
     def side_by_side_plot(self, patient=None, slice_idx=None, out_path=None): 
         """
