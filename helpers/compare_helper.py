@@ -21,25 +21,6 @@ class CompareHelper():
             self.add_model(model_helper)
 
     def add_model(self, model_helper):
-        """
-        if not self.data_hdf5:
-            # Load data and metadata
-            self.data_hdf5 = model_helper.data_hdf5
-            self.metadata_json = model_helper.metadata_json
-            self.data = h5py.File(self.data_hdf5)
-            with open(self.metadata_json, "r") as f_in:
-                self.metadata = json.load(f_in)
-        elif self.data_hdf5 != model_helper.data_hdf5:
-            print("Model %s was trained on a different dataset"
-                  % model_helper.tag)
-            print("--> skipping")
-            return
-        elif model_helper.tag in self.model_tags:
-            print("Model %s already loaded" % model_helper.tag)
-            print("--> skipping")
-            return
-        """
-        # Store model
         print("Loaded model %s" % model_helper.tag)
         model_helper.assign_data(self.data, self.metadata)
         self.model_helpers.append(model_helper)
