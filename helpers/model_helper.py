@@ -1,6 +1,7 @@
 import json
 import glob
 import pandas
+import numpy
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
 from .print_helper import print
@@ -26,7 +27,7 @@ class ModelHelper():
             self.load_weights()
             # Other
             self.patients_test = summary["patients_test"]
-            self.random_seeds = summary["random_seeds"]
+            self.n_trainings = self.metrics_df.random_seed.nunique()
 
     def load_weights(self, weights_file=""):
         if not weights_file:
@@ -62,8 +63,29 @@ class ModelHelper():
         raise NotImplementedError
 
     @staticmethod
-    def roc_plot(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, name, 
-                 fig=None, save=True, tag=None):
+    def loss_timeseries(training_loss, validation_loss, loss_function_name="", 
+                        output_file="", fig=None, save=True, tag=None):
+        if not fig:
+            fig, axes = plt.subplots()
+        else:
+            axes = fig.axes[0]
+        # Plot
+        plt.plot(training_loss, label="training")
+        plt.plot(validation_loss, label="validation")
+        # Plot formatting
+        plt.legend()
+        plt.xlabel("Epochs")
+        loss_function_name = " ".join(loss_function_name.split("_"))
+        plt.ylabel(loss_function_name.title())
+        plt.title("Loss Timeseries")
+        if save:
+            plt.savefig(output_file)
+            plt.close(fig)
+        return
+
+    @staticmethod
+    def roc_curve(fpr_mean, fpr_std, tpr_mean, tpr_std, auc, auc_std, 
+                  output_file="", fig=None, save=True, tag=None):
         """
         Plot mean False Positive Rates (FPR) against mean True Positive Rates
         (TPR) with 1 sigma confidence bands
@@ -92,9 +114,34 @@ class ModelHelper():
         plt.ylabel("True Positive Rate")
         plt.legend(loc="lower right")
         if save:
-            plt.savefig(name)
+            plt.savefig(output_file)
             plt.close(fig)
 
+        return
+
+    def plot_loss_timeseries(self, fig=None):
+        """
+        Get training and testing loss values for each epoch of every training,
+        plot as a timeseries
+        """
+        # Only plot for individual plots (no common fig supplied)
+        if fig != None:
+            return
+        output_file = self.plot_dir+"loss_timeseries_training-%02d.pdf"
+        for i in range(self.n_trainings):
+            # Get training metrics
+            this_training = (self.metrics_df.training == i)
+            metrics_df = self.metrics_df[this_training].reset_index(drop=True)
+            # Plot
+            ModelHelper.loss_timeseries(
+                metrics_df.loss,
+                metrics_df.val_loss,
+                loss_function_name=self.loss_function,
+                output_file=(output_file % i),
+                fig=fig,
+                save=(not fig),
+                tag=self.tag
+            )
         return
 
     def plot_roc_curve(self, fig=None):
@@ -104,13 +151,12 @@ class ModelHelper():
         Uncertainties are calculated only if at least 3 different 
         test/train splits are saved in the results
         """
-        n_trainings = self.metrics_df.random_seed.nunique()
         # Collect ROC curve data
         tprs = []
         fprs = []
         aucs = []
-        for i in range(n_trainings):
-            this_training = (self.metrics_df.random_seed == i)
+        for i in range(self.n_trainings):
+            this_training = (self.metrics_df.training == i)
             tpr = self.metrics_df.tpr[this_training].to_numpy()[-1]
             fpr = self.metrics_df.fpr[this_training].to_numpy()[-1]
             auc = self.metrics_df.auc[this_training].to_numpy()[-1]
@@ -122,7 +168,7 @@ class ModelHelper():
         fpr_mean = numpy.mean(fprs, axis=0)
         auc = numpy.mean(aucs)
         # Get standard deviations
-        if n_trainings >= 3:
+        if self.n_trainings >= 3:
             tpr_std = numpy.std(tprs, axis=0)
             fpr_std = numpy.std(fprs, axis=0)
             auc_std = numpy.std(aucs)
@@ -131,14 +177,14 @@ class ModelHelper():
             fpr_std = numpy.zeros_like(fpr_mean)
             auc_std = 0.
         # Plot
-        ModelHelper.roc_plot(
+        ModelHelper.roc_curve(
             fpr_mean,
             fpr_std,
             tpr_mean,
             tpr_std,
             auc,
             auc_std,
-            self.plot_dir+self.tag+"_roc_curve.pdf",
+            output_file=self.plot_dir+"roc_curve.pdf",
             fig=fig,
             save=(not fig),
             tag=self.tag
