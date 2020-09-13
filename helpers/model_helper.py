@@ -13,7 +13,8 @@ class ModelHelper():
             model_dir += "/"
         self.model_dir = model_dir
         self.plot_dir = model_dir+"plots/"
-        with open(self.model_dir+"summary.json", "r") as f_in:
+        self.tag = model_dir.split("/")[-2]
+        with open(self.model_dir+self.tag+"_summary.json", "r") as f_in:
             summary = json.load(f_in)
             # Load model
             self.model = model(summary["model_config"], verbose=False)
@@ -22,7 +23,7 @@ class ModelHelper():
                 setattr(self, name, value)
             self.n_extra_slices = int((self.input_shape[-1] - 1)/2.0)
             # External files
-            metrics_file = self.model_dir+"metrics.pickle"
+            metrics_file = self.model_dir+self.tag+"_metrics.pickle"
             self.metrics_df = pandas.read_pickle(metrics_file)
             self.load_weights()
             # Other

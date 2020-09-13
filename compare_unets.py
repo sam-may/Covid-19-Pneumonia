@@ -165,7 +165,7 @@ class PlotHelper(ModelHelper):
 
 if __name__ == "__main__":
     # Initialize comparison framework
-    basedir = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256" 
+    basedir = "/public/smay/covid_ct_data/features/14Jul2020_z_score_downsample256/" 
     compare_helper = CompareHelper(
         data_hdf5=basedir+"features.hdf5", 
         metadata_json=basedir+"features.json"
